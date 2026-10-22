@@ -38,6 +38,22 @@ def make_letter_pdf(path: Path) -> Path:
     return path
 
 
+def make_scanned_pdf(path: Path, source: Path, dpi: int = 200) -> Path:
+    """Skaner xatni taqlid qiladi: har sahifa rasmga aylantirilib, matnsiz PDF'ga joylanadi."""
+    doc = pymupdf.open()
+    with pymupdf.open(source) as src:
+        for page in src:
+            new_page = doc.new_page(width=page.rect.width, height=page.rect.height)
+            new_page.insert_image(new_page.rect, pixmap=page.get_pixmap(dpi=dpi))
+    doc.save(path)
+    return path
+
+
 @pytest.fixture
 def letter_pdf(tmp_path: Path) -> Path:
     return make_letter_pdf(tmp_path / "soxta_xat.pdf")
+
+
+@pytest.fixture
+def scanned_pdf(tmp_path: Path, letter_pdf: Path) -> Path:
+    return make_scanned_pdf(tmp_path / "soxta_skaner.pdf", letter_pdf)
