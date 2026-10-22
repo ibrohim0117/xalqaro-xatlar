@@ -28,24 +28,23 @@ imzolagan shaxs (lotinda), qisqacha mazmun, boshqarma.
 - "ПОВТОРНО" 8 ta xatda bor, ulardan 7 tasi baribir viloyatga yuborilgan.
 - Qisqacha mazmun 85% holatda bir xil.
 
+| # | Ish | Natija |
+|---|---|---|
+| B1 | Xatlarni bo'lish: 70 ta sozlash (dev), 30 ta imtihon (test), har guruhdan o'z ulushida | dev: viloyat 57, notariat 11, xalqaro 2; test: 24, 5, 1 |
+| B2 | Baholash skripti va eng oddiy boshlang'ich natija ("har doim eng ko'p uchragan javob") | Pastki chegara (dev): mazmun 84.3%, boshqarma 18.6%, tashkilot 15.7%, imzo 15.7%, sana 11.4%, raqam 2.9% |
+| B3 | PDF → matn: matn qatlami yoki OCR (Tesseract), har so'zning sahifadagi joyi bilan; kesh | 589 dev sahifa: 477 matn qatlamidan, 112 OCR'dan. OCR ~2.2 s/sahifa |
+
+**B3 dan asosiy xulosalar (70 ta dev xat, dastlabki 2 sahifa):**
+- **Sana ~2/3, raqam ~3/4 xatda matnga umuman tushmagan:** ular shtamp yoki qo'lda ko'k siyohda yozilgan,
+  na skaner dasturi, na Tesseract o'qiy oladi. Matndan qidirish sana uchun ko'pi bilan 33%, raqam uchun 27%.
+- **"№" belgisi 83% xatda topiladi** va doim sahifaning yuqori yarmida (odatda tepadan ~1/3 da). U sana-raqam
+  qatorining joyini ko'rsatadi. Tesseract uni skaner dasturining matn qatlamidan yaxshiroq topadi (80% / 65%).
+- Bosma matn (blank, qabul qiluvchi, xat matni) yaxshi o'qiladi. OCR'da chap va o'ng bloklar bitta qatorga
+  qo'shilib ketadi, shuning uchun qatorlarga emas, **so'zlarning joyiga** tayaniladi.
+
 ---
 
 ## B. Qolgan ishlar (bajarilish tartibida)
-
-### B1. Xatlarni ikkiga bo'lish: 70 ta sozlash uchun, 30 ta imtihon uchun
-**Nega:** qoida va lug'atlar 70 ta xatda tuziladi, aniqlik esa AI ilgari ko'rmagan 30 ta xatda
-o'lchanadi. Aks holda natija yolg'ondan yaxshi chiqadi (*data leakage*). Bo'lishda har bir boshqarma
-guruhidan o'z ulushiga qarab olinadi.
-
-### B2. Baholash skripti va eng oddiy boshlang'ich natija
-**Nega:** har bir yaxshilanishni raqam bilan ko'rish uchun. Avval "hech narsa bilmaydigan" natija
-o'lchanadi, masalan qisqacha mazmun uchun har doim standart matn. Bu pastki chegara bo'ladi.
-Skript faqat foizlarni chiqaradi, shaxsiy ma'lumotni ko'rsatmaydi.
-
-### B3. PDF → matn
-**Nega:** qolgan hamma ish matnga tayanadi. Matn qatlami bo'lsa o'sha olinadi, bo'lmasa yoki sifati
-yomon bo'lsa OCR qilinadi. So'zlarning sahifadagi joyi ham saqlanadi: sarlavha, sana qatori, imzo
-qayerdaligini bilish uchun.
 
 ### B4. Boshqarma (eng muhim, natijaning 81% i)
 1. **Manzil → viloyat.** O'zbekiston viloyat va tumanlari ro'yxati tuziladi: ruscha shakllari, sovet
@@ -59,7 +58,7 @@ qayerdaligini bilish uchun.
 ### B5. Rekvizitlar
 | Maydon | Yondashuv | Qiyinligi |
 |---|---|---|
-| Hujjat sanasi va raqami | Sarlavhadagi "sana № raqam" qatori. Sana formatlari bir ko'rinishga keltiriladi. "На № ... от ..." kabi tuzoqlar chetlab o'tiladi | Qiyin: qo'lyozma |
+| Hujjat sanasi va raqami | Matnda bo'lsa (~1/3) — "sana № raqam" qatoridan. Bo'lmasa — "№" langari bo'yicha qatorni rasmdan kesib, alohida o'qish (kerak bo'lsa qo'l yozuvi uchun lokal model). Sana formatlari bir ko'rinishga keltiriladi. "На № ... от ..." kabi tuzoqlar chetlab o'tiladi | Eng qiyin: shtamp va qo'lyozma |
 | Imzolagan shaxs | Xat oxiridagi lavozim va ism. Kirilldan lotinga o'giriladi (Ш→Sh, Х→X) | O'rta |
 | Jo'natuvchi tashkilot | Katalog bo'lsa, undan eng mosi topiladi. Bo'lmasa, lug'at va qoliplar asosida tarjima qilinadi | O'rta yoki qiyin |
 | Qisqacha mazmun | Standart matn. Qolgan 15 ta holat o'rganiladi | Oson yoki noaniq |
