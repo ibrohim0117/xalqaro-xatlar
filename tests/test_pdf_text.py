@@ -1,15 +1,7 @@
 """src/pdf_text.py testlari — faqat soxta xat bilan (tests/conftest.py)."""
 
-import shutil
-
-import pytest
-
-from src.pdf_text import TESSDATA, PageText, read_ocr, read_pdf, read_text_layer
-
-needs_tesseract = pytest.mark.skipif(
-    shutil.which("tesseract") is None or not (TESSDATA / "rus.traineddata").exists(),
-    reason="Tesseract yoki models/tessdata/rus.traineddata yo'q",
-)
+from src.pdf_text import PageText, read_ocr, read_pdf, read_text_layer
+from tests.conftest import needs_tesseract
 
 
 def find(page: PageText, text: str):

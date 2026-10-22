@@ -4,10 +4,19 @@ Xatdagi hamma nom, raqam va shaxslar to'qilgan. Joylashuv real xatlar tuzilishig
 chapda jo'natuvchi va "sana № raqam", o'ngda qabul qiluvchi, pastda imzo.
 """
 
+import shutil
 from pathlib import Path
 
 import pymupdf
 import pytest
+
+from src.pdf_text import TESSDATA
+
+# OCR testlari Tesseract va til paketi (models/ gitignore'da) bo'lmasa o'tkazib yuboriladi
+needs_tesseract = pytest.mark.skipif(
+    shutil.which("tesseract") is None or not (TESSDATA / "rus.traineddata").exists(),
+    reason="Tesseract yoki models/tessdata/rus.traineddata yo'q",
+)
 
 # (x, y punktlarda, matn). A4 = 595 x 842 punkt, y yuqoridan pastga o'sadi.
 FAKE_LETTER = [
