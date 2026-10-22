@@ -64,12 +64,20 @@ def predicted_boshqarma(prediction: dict) -> str | None:
     return names[0] if names else None
 
 
+def true_values(truth: dict) -> dict[str, str | None]:
+    """Kalit json'idan 6 ta maydonning to'g'ri javobi."""
+    true_doc = truth.get("rekvizit_document") or {}
+    values = {field: true_doc.get(field) for field in REKVIZIT_FIELDS}
+    values["boshqarma"] = expected_boshqarma(truth)
+    return values
+
+
 def field_values(prediction: dict, truth: dict) -> dict[str, tuple[str | None, str | None]]:
     """Har maydon uchun (AI javobi, to'g'ri javob) juftligi."""
     pred_doc = prediction.get("rekvizit_document") or {}
-    true_doc = truth.get("rekvizit_document") or {}
-    values = {field: (pred_doc.get(field), true_doc.get(field)) for field in REKVIZIT_FIELDS}
-    values["boshqarma"] = (predicted_boshqarma(prediction), expected_boshqarma(truth))
+    expected = true_values(truth)
+    values = {field: (pred_doc.get(field), expected[field]) for field in REKVIZIT_FIELDS}
+    values["boshqarma"] = (predicted_boshqarma(prediction), expected["boshqarma"])
     return values
 
 
