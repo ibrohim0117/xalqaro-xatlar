@@ -1,0 +1,20 @@
+# ── MAXFIY: real xatlar va ulardan olingan natijalar HECH QACHON gitga kirmaydi ──
+data/real/*
+!data/real/README.txt
+outputs/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.ruff_cache/
+.pytest_cache/
+
+# Sozlamalar
+.env
+
+# Claude uchun lokal eslatmalar
+CLAUDE.md
+
+# macOS
+.DS_Store
