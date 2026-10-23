@@ -46,6 +46,9 @@ def test_compare_answers_from_crop_texts():
     assert found["raqam: number bo'lagi"] == found["raqam: line bo'lagi"] == "3-3-28/16847"
     assert answers(texts, text_layer_date="01.01.2026")["sana: yangi qoida"] == "01.01.2026"
     assert answers({}, text_layer_date=None)["raqam: number bo'lagi"] is None  # bo'lak yo'q
+    header = {"header": "Справка от 01.01.2025\n12.03.2026 № 55/07"}  # "от" dan keyingisi emas
+    assert answers(header, text_layer_date=None)["sana: header bo'lagi"] == "12.03.2026"
+    assert answers(header, text_layer_date=None)["sana: yangi qoida + header"] == "12.03.2026"
 
 
 def test_check_crops_runs_on_a_letter(tmp_path, monkeypatch, capsys):

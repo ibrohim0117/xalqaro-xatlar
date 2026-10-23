@@ -2,14 +2,15 @@
 
 Har OCR uchun (make_crops yasagan bo'laklar, faqat dev):
 - date.png   -> sana;  number.png -> raqam;  line.png -> sana va raqam (to'liq qator);
+- header.png -> sana ("№" topilmagan xatlarda ham bor): birinchi sana, "от" dan keyingisi emas;
 - "yangi qoida" — hozirgi tizim (matn qatlamidan sana avtomatik) + bo'sh qolgan joyga bo'lak OCR'i.
 Hisob 70 xatga nisbatan (bo'lagi yo'q xat — javob yo'q). Javob: OCR biror qiymat chiqardi;
 to'g'ri: json bilan mos (bo'shliqsiz solishtiriladi). Vaqt — bitta bo'lakka (median).
 O'qilgan matnlar outputs/ocr/<OCR>.json ga yoziladi (keyingi tahlil uchun; Claude OCHMAYDI).
 Ekranga FAQAT sonlar chiqadi.
 
-Ishga tushirish:
-    poetry run python -m scripts.ocr.compare_ocr tesseract tesseract-bin tesseract-digits
+Ishga tushirish (OCR nomlari — src/reading/engines READERS):
+    poetry run python -m scripts.ocr.compare_ocr rapidocr rapidocr-eslav tesseract-block
 """
 
 import argparse
@@ -22,7 +23,7 @@ from pathlib import Path
 from src.common.text import normalize
 from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
-from src.fields.date_number import date_and_number, parse_date, parse_number
+from src.fields.date_number import all_dates, date_and_number, parse_date, parse_number
 from src.reading.engines import READERS, make_reader
 
 CROPS_DIR = Path("outputs/crops")
@@ -31,6 +32,8 @@ ROWS = [  # (qator nomi, maydon)
     ("sana: date bo'lagi", "sana"),
     ("sana: line bo'lagi", "sana"),
     ("sana: yangi qoida", "sana"),
+    ("sana: header bo'lagi", "sana"),
+    ("sana: yangi qoida + header", "sana"),
     ("raqam: number bo'lagi", "raqam"),
     ("raqam: line bo'lagi", "raqam"),
 ]
@@ -43,10 +46,13 @@ def same(value: str | None, expected: str | None) -> bool:
 def answers(texts: dict[str, str], text_layer_date: str | None) -> dict[str, str | None]:
     """Bo'laklardan o'qilgan matn -> har qator uchun qiymat."""
     date_crop = parse_date(texts.get("date", ""))
+    header = next((d for d, ot in all_dates(texts.get("header", "")) if not ot), None)
     return {
         "sana: date bo'lagi": date_crop,
         "sana: line bo'lagi": parse_date(texts.get("line", ""), skip_after_ot=True),
         "sana: yangi qoida": text_layer_date or date_crop,
+        "sana: header bo'lagi": header,
+        "sana: yangi qoida + header": text_layer_date or date_crop or header,
         "raqam: number bo'lagi": parse_number(texts.get("number", "")),
         "raqam: line bo'lagi": parse_number(texts.get("line", "")),
     }
@@ -79,7 +85,7 @@ def main() -> None:
         for doc_id in dev:
             folder = CROPS_DIR / doc_id
             texts = {}
-            for crop in ("date", "number", "line"):
+            for crop in ("date", "number", "line", "header"):
                 path = folder / f"{crop}.png"
                 if path.exists():
                     start = time.perf_counter()
@@ -94,11 +100,11 @@ def main() -> None:
 
         median = statistics.median(times) * 1000 if times else 0
         print(f"  {name}  (bitta bo'lak: {median:.0f} ms)")
-        print(f"    {'':<24}{'javob':>7}{'to`g`ri':>10}{'ishonchlilik':>15}")
+        print(f"    {'':<28}{'javob':>7}{'to`g`ri':>10}{'ishonchlilik':>15}")
         for row, _ in ROWS:
             answered, right = stats[row, "javob"], stats[row, "to'g'ri"]
             reliability = f"{right / answered:.0%}" if answered else "—"
-            print(f"    {row:<24}{answered:>7}{right:>6} /{n:<3}{reliability:>12}")
+            print(f"    {row:<28}{answered:>7}{right:>6} /{n:<3}{reliability:>12}")
         print()
 
 

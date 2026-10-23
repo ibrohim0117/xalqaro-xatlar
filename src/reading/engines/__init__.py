@@ -21,6 +21,8 @@ READERS: dict[str, tuple[str, str, dict]] = {
     "tesseract-digits": ("src.reading.engines.tesseract", "TesseractReader", {"digits_only": True}),
     "tesseract-block": ("src.reading.engines.tesseract", "TesseractReader", {"psm": 6}),
     "tesseract-sparse": ("src.reading.engines.tesseract", "TesseractReader", {"psm": 11}),
+    "rapidocr": ("src.reading.engines.rapid", "RapidReader", {}),
+    "rapidocr-eslav": ("src.reading.engines.rapid", "RapidReader", {"rec": "eslav"}),
     "tesseract-digits-block": (
         "src.reading.engines.tesseract",
         "TesseractReader",
