@@ -13,6 +13,7 @@ Nima saqlanadi (B3.3 va B3.5 xulosalari bo'yicha):
 """
 
 import json
+import time
 from dataclasses import astuple, dataclass
 from pathlib import Path
 
@@ -47,10 +48,30 @@ class CachedPage:
         return self.text_layer
 
 
-def extract_pages(pdf: Path | bytes, max_pages: int | None = None) -> list[CachedPage]:
+@dataclass
+class OcrStats:
+    """OCR hisoblagichi: necha marta chaqirildi va qancha vaqt ketdi (qayta OCR ham sanaladi)."""
+
+    calls: int = 0
+    seconds: float = 0.0
+
+
+def _ocr(page: pymupdf.Page, number: int, stats: OcrStats | None, lang: str = "rus") -> PageText:
+    start = time.perf_counter()
+    result = ocr_page(page, number, lang=lang)
+    if stats is not None:
+        stats.calls += 1
+        stats.seconds += time.perf_counter() - start
+    return result
+
+
+def extract_pages(
+    pdf: Path | bytes, max_pages: int | None = None, stats: OcrStats | None = None
+) -> list[CachedPage]:
     """PDF'dan sahifalarni o'qiydi: matn qatlami har doim, OCR faqat kerakli sahifalarda.
     pdf — fayl yo'li yoki baytlar (API: yuklangan PDF diskka yozilmaydi, xotiradan ochiladi).
-    max_pages — faqat dastlabki N sahifa (None — hammasi, kesh uchun)."""
+    max_pages — faqat dastlabki N sahifa (None — hammasi, kesh uchun).
+    stats — berilsa, OCR'ga ketgan vaqt shu yerga yig'iladi (API javobidagi "vaqt")."""
     pages = []
     doc = pymupdf.open(stream=pdf, filetype="pdf") if isinstance(pdf, bytes) else pymupdf.open(pdf)
     with doc:
@@ -60,11 +81,11 @@ def extract_pages(pdf: Path | bytes, max_pages: int | None = None) -> list[Cache
                 break
             words = text_layer_words(page)
             need_ocr = number == 1 or not has_text_layer(words)
-            ocr = ocr_page(page, number) if need_ocr else None
+            ocr = _ocr(page, number, stats) if need_ocr else None
             cached = CachedPage(number, PageText(number, "text_layer", words), ocr)
             main = cached.main
             if len(main.words) >= RETRY_MIN_WORDS and text_quality(main.words) < QUALITY_MIN:
-                latin = ocr_page(page, number, lang=LATIN_LANG)
+                latin = _ocr(page, number, stats, lang=LATIN_LANG)
                 if ocr is None or text_quality(latin.words) > text_quality(ocr.words):
                     cached.ocr = latin
             pages.append(cached)
