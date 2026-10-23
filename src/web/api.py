@@ -1,5 +1,6 @@
 """B7.2–B7.3: API va sahifa — PDF yuklanadi, AI javobi qaytadi; xodim jo'natuvchini tasdiqlaydi.
 
+GET  /         — sahifa (templates/index.html; CSS va JS — static/, internetdan hech narsa yo'q)
 POST /extract  — PDF (+ ixtiyoriy to'g'ri javob json'i — test rejimi) -> AI javobi, vaqt, blank_id,
                  joylar (har maydon qayerdan olingani); ?rasmlar=true — sahifalar rasmi ham
 POST /confirm  — {blank_id, nom}: xodim tasdiqlagan jo'natuvchi xotiraga yoziladi
@@ -19,6 +20,8 @@ from typing import Annotated
 
 import pymupdf
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from src.engine.feedback import FEEDBACK_FILE, confirm_sender
@@ -28,6 +31,7 @@ from src.evaluation.evaluate import compare
 from src.reading.images import page_images
 
 MAX_BLANKS = 1000  # RAM'da turadigan oxirgi blanklar (eskisi o'chadi)
+WEB_DIR = Path(__file__).parent  # templates/ va static/ shu yerda
 
 
 class Confirmation(BaseModel):
@@ -48,6 +52,7 @@ def read_truth(file: UploadFile) -> dict:
 
 def create_app(model_file: Path = MODEL_FILE, feedback_file: Path = FEEDBACK_FILE) -> FastAPI:
     app = FastAPI(title="Xalqaro xatlar: rekvizitlar")
+    app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
     models: list[Model] = []  # model bir marta yuklanadi; tasdiqdan keyin qayta yuklanadi
     blanks: OrderedDict[str, str] = OrderedDict()
 
@@ -60,6 +65,10 @@ def create_app(model_file: Path = MODEL_FILE, feedback_file: Path = FEEDBACK_FIL
                     503, "Model yo'q: avval `poetry run python -m scripts.prototype.run_predict`"
                 ) from e
         return models[0]
+
+    @app.get("/", include_in_schema=False)
+    def page() -> FileResponse:
+        return FileResponse(WEB_DIR / "templates" / "index.html")
 
     @app.post("/extract")
     def extract(
