@@ -32,7 +32,8 @@ imzolagan shaxs (lotinda), qisqacha mazmun, boshqarma.
 |---|---|---|
 | B1 | Xatlarni bo'lish: 70 ta sozlash (dev), 30 ta imtihon (test), har guruhdan o'z ulushida | dev: viloyat 57, notariat 11, xalqaro 2; test: 24, 5, 1 |
 | B2 | Baholash skripti va eng oddiy boshlang'ich natija ("har doim eng ko'p uchragan javob") | Pastki chegara (dev): mazmun 84.3%, boshqarma 18.6%, tashkilot 15.7%, imzo 15.7%, sana 11.4%, raqam 2.9% |
-| B3 | PDF → matn: matn qatlami yoki OCR (Tesseract), har so'zning sahifadagi joyi bilan; kesh | 589 dev sahifa: 477 matn qatlamidan, 112 OCR'dan. OCR ~2.2 s/sahifa |
+| B3 | PDF → matn: matn qatlami yoki OCR (Tesseract), har so'zning sahifadagi joyi bilan; matn sifati bahosi; kesh | 589 dev sahifa: 465 matn qatlamidan, 124 OCR'dan. OCR ~2.2 s/sahifa |
+| B4 | Boshqarma: hududlar lug'ati (14 hudud, ruscha va o'zbekcha), qabul qiluvchi blokini chetlash, notariat belgisi, dev'dan o'rganilgan boshqarma nomlari | **Dev: 82.9% (58/70)**, javob bergan xatlarda 92.1% to'g'ri; notariat 100%, viloyat 82.5%, xalqaro 0% (2 xat). Pastki chegara 18.6% edi |
 
 **B3 dan asosiy xulosalar (70 ta dev xat, dastlabki 2 sahifa):**
 - **Sana ~2/3, raqam ~3/4 xatda matnga umuman tushmagan:** ular shtamp yoki qo'lda ko'k siyohda yozilgan,
@@ -41,19 +42,26 @@ imzolagan shaxs (lotinda), qisqacha mazmun, boshqarma.
   qatorining joyini ko'rsatadi. Tesseract uni skaner dasturining matn qatlamidan yaxshiroq topadi (80% / 65%).
 - Bosma matn (blank, qabul qiluvchi, xat matni) yaxshi o'qiladi. OCR'da chap va o'ng bloklar bitta qatorga
   qo'shilib ketadi, shuning uchun qatorlarga emas, **so'zlarning joyiga** tayaniladi.
+- Sahifalarning bir qismi (qo'lda to'ldirilgan shakllar, FHDYO guvohnomalari) hech bir OCR bilan o'qilmaydi.
+  O'zbek (lotin) tilida qayta o'qish sinab ko'rildi — natijani yaxshilamadi.
+
+**B4 dan asosiy xulosalar (dev):**
+- Viloyat xatlari asosan **FHDYO yozuvini talab qilish** ("ЗАГС", "актовая запись" 50/57), notariat xatlari —
+  **meros** ishlari ("нотари…" 1–2-sahifada notariatda 11/11, viloyatda 1/57).
+- Hudud fuqaroning manzilidan yoki **hujjat qayd etilgan FHDYO bo'limidan** olinadi; manzil ko'pincha ilovalarda
+  (3+ sahifada). Faqat 1–2-sahifa olinsa, hudud natijasi 84% dan 60% ga tushadi.
+- Hudud ham, notariat belgisi ham topilmasa — taxmin qilinmaydi, **"tekshirish kerak"** belgisi qo'yiladi
+  (dev'da 7 ta xat: 5 tasi o'qilmaydigan sahifalar, 2 tasi xalqaro).
+- Sinab ko'rilgan va rad etilgan gipotezalar: "o'ng blokdan faqat Toshkentni chetlash", "tasdiqlangan nusxa
+  iborasini hisobga olmaslik", "notariat uchun meros so'zi ham kerak", "past sifatli sahifalarni rus+uzb bilan qayta o'qish".
+- Dev natijasi qoidalar shu xatlarga qarab sozlangani uchun biroz optimistik; haqiqiy raqam — B6 da test xatlarida.
 
 ---
 
 ## B. Qolgan ishlar (bajarilish tartibida)
 
-### B4. Boshqarma (eng muhim, natijaning 81% i)
-1. **Manzil → viloyat.** O'zbekiston viloyat va tumanlari ro'yxati tuziladi: ruscha shakllari, sovet
-   davri nomlari ("Узбекская ССР", "Чирчикский горисполком") bilan. Qabul qiluvchining manzili chiqarib
-   tashlanadi. Toshkent **shahri** va **viloyati** alohida ajratiladi, ular viloyat holatlarining 42% i.
-2. **Manzil topilmasa:** notariat yoki xalqaro-huquqiy hamkorlik, xat mazmuniga qarab.
-3. **"ПОВТОРНО" va indeks qoidasi.**
-
-**Nega birinchi:** bu tizimning asosiy foydasi (xatni to'g'ri joyga yuborish) va bahoning eng katta qismi.
+**Tartib o'zgardi:** avval birinchi prototip (B7: boshqarma va qisqacha mazmun), keyin rekvizitlar (B5).
+Sabab: rahbar asosiy funksiyani erta ko'rib, fikr bildira oladi.
 
 ### B5. Rekvizitlar
 | Maydon | Yondashuv | Qiyinligi |
@@ -89,10 +97,17 @@ README (qanday ishga tushiriladi) va hisobot: tanlangan usullar, aniqlik, cheklo
 3. "ПОВТОРНО" xatlarda indeks qoidasi aynan qachon qo'llanadi? To'liq indeks jadvali bormi?
 4. Tizimdagi jo'natuvchi tashkilotlar katalogini olsa bo'ladimi?
 5. Kod qayerda saqlanadi? Prototip qanday ko'rinishda bo'lishi kerak va muddati qachon?
+6. Xalqaro-huquqiy hamkorlik boshqarmasiga qanday xatlar beriladi? Dev'dagi 2 ta shunday xatda O'zbekistondagi
+   manzil ham, notariusga oid so'z ham yo'q.
+7. Notarius meros ishi uchun FHDYO hujjatini so'rasa, xat notariatga beriladimi yoki viloyat adliya boshqarmasiga?
+8. Ijrochi boshqarmalarning rasmiy ro'yxati (EDO'dagi nomlar). Dev'da Buxoro va Navoiy uchramagan, nomlar esa
+   bir xil qolipda emas (12 tadan 5 tasi "<hudud> adliya boshqarmasi" shaklida).
 
 ## D. Xavflar
 
 - **Qo'lyozma** sana va raqamlar: Tesseract ularni yaxshi o'qimaydi. Kerak bo'lsa, kuchliroq lokal OCR sinab ko'riladi.
 - **Kam ma'lumot:** imtihon to'plamida bor-yo'g'i 30 ta xat, shuning uchun foizlar taxminiy bo'ladi.
 - **Bir nechta viloyatli xat** namunalarda uchramadi. Kod uni qo'llab-quvvatlaydi, lekin real xatda sinalmagan.
+- **O'qilmaydigan ilovalar** (qo'lda to'ldirilgan shakllar, FHDYO guvohnomalari): manzil faqat ularda bo'lsa,
+  hudud topilmaydi — "tekshirish kerak".
 - **Notanish tashkilotlar:** 33 tadan ko'p bo'lishi mumkin.
