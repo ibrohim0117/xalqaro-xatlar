@@ -107,6 +107,9 @@ README (qanday ishga tushiriladi) va hisobot: tanlangan usullar, aniqlik, cheklo
    bir xil qolipda emas (12 tadan 5 tasi "<hudud> adliya boshqarmasi" shaklida).
 9. *(23.10 da so'raldi)* Bir xatda turli viloyatlardan bir nechta guvohnoma so'ralsa (100 ta namunada
    uchramagan), har viloyat uchun `tasks` ichida alohida task ochiladimi?
+   **Javob (23.10):** bunday holat juda kam. Xatda viloyat so'ralsa, ijrochi — o'sha viloyat adliya
+   boshqarmasi; boshqa hollarda — vazirlikning ichki boshqarmasi. Alohida task ochilishi aniq aytilmagan.
+   Xulosa: ustuvorligi past, hozircha bitta task.
 
 ## D. Xavflar
 
