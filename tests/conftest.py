@@ -10,7 +10,7 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from src.pdf_text import TESSDATA
+from src.reading.pdf_text import TESSDATA
 
 # OCR testlari Tesseract va til paketi (models/ gitignore'da) bo'lmasa o'tkazib yuboriladi
 needs_tesseract = pytest.mark.skipif(

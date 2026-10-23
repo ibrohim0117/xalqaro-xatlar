@@ -1,0 +1,1 @@
+"""API va veb-sahifa."""
