@@ -91,8 +91,8 @@ def test_confirmed_sender_is_recognized_next_time(client, tmp_path):
 def test_page_and_static_files_are_served(client):
     page = client.get("/")
     assert page.status_code == 200 and "text/html" in page.headers["content-type"]
-    assert '<script src="/static/app.js"' in page.text
-    for name in ("app.js", "style.css"):
+    assert '<script type="module" src="/static/js/main.js"' in page.text
+    for name in ("js/main.js", "js/single.js", "js/batch.js", "style.css"):
         assert client.get(f"/static/{name}").status_code == 200
     # sahifa internetdan hech narsa yuklamaydi
     assert "http://" not in page.text and "https://" not in page.text

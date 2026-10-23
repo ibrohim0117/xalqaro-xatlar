@@ -1,70 +1,45 @@
-// B7.3: bitta xat sahifasi — PDF yuklanadi, AI javobi maydonlarda, har qiymat joyi PDF ustida ramkada.
-// Xavfsizlik: xatdan o'qilgan matn DOM'ga faqat textContent orqali qo'yiladi (innerHTML emas) —
-// OCR matnidagi "<script>" kabi bo'lak kod bo'lib ishlab ketmaydi.
-"use strict";
+// Bitta xat: PDF yuklanadi, AI javobi maydonlarda, har qiymat joyi PDF ustida ramkada.
 
-const FIELDS = [
-  { key: "hujjat_junatuvchi_tashkilot", label: "Jo'natuvchi tashkilot", short: "Jo'natuvchi" },
-  { key: "hujjat_sana", label: "Hujjat sanasi", short: "Sana" },
-  { key: "hujjat_raqami", label: "Hujjat raqami", short: "Raqam" },
-  { key: "imzolagan_shaxs", label: "Imzolagan shaxs", short: "Imzo" },
-  { key: "hujjatning_qisqacha_mazmuni", label: "Qisqacha mazmun", short: "Mazmun" },
-  { key: "boshqarma", label: "Boshqarma (task)", short: "Boshqarma" },
-];
-const REKVIZIT = FIELDS.map((f) => f.key).filter((k) => k !== "boshqarma");
+import { confirmSender, extract } from "./api.js";
+import { $, el } from "./dom.js";
+import { FIELDS, REKVIZIT, isFlagged, suggestionsOf, valueOf } from "./fields.js";
 
-const $ = (id) => document.getElementById(id);
 let answer = null; // oxirgi AI javobi
 
-/** Element yasash: el("div", {className: "x"}, "matn", boshqaElement) — matn har doim textContent. */
-function el(tag, props = {}, ...children) {
-  const node = Object.assign(document.createElement(tag), props);
-  for (const child of children) {
-    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
-  }
-  return node;
+export function initSingle() {
+  $("upload").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if ($("pdf").files[0]) showLetter($("pdf").files[0], $("truth").files[0] || null);
+  });
+  $("copy").addEventListener("click", copyJson);
 }
 
-function valueOf(data, key) {
-  if (key === "boshqarma") {
-    return data.tasks?.[0]?.asosiy_ijrochilar_boshqarmalari?.[0] ?? null;
-  }
-  return data.rekvizit_document?.[key] ?? null;
-}
-
-function suggestionsOf(data, key) {
-  const value = data.takliflar?.[key];
-  if (!value) return [];
-  return Array.isArray(value) ? value : [value];
-}
-
-// ── Yuklash va tahlil ──
-async function analyze(event) {
-  event.preventDefault();
-  const pdf = $("pdf").files[0];
-  if (!pdf) return;
-  const form = new FormData();
-  form.append("pdf", pdf);
-  if ($("truth").files[0]) form.append("truth", $("truth").files[0]);
-
+/** Xatni tahlil qilib ko'rsatadi (papka jadvalidan ham chaqiriladi). */
+export async function showLetter(pdf, truth = null) {
+  setFiles("pdf", pdf);
+  setFiles("truth", truth);
   const started = Date.now();
   const tick = () => setStatus(`O'qilyapti… ${Math.round((Date.now() - started) / 1000)} s (OCR)`);
   tick();
   const timer = setInterval(tick, 1000);
   $("run").disabled = true;
   try {
-    const response = await fetch("/extract?rasmlar=true", { method: "POST", body: form });
-    const body = await response.json();
-    if (!response.ok) throw new Error(body.detail || `Server xatosi (${response.status})`);
-    answer = body;
+    answer = await extract(pdf, truth, { images: true });
     render();
-    setStatus(`Tayyor: ${body.vaqt.jami} s`);
+    setStatus(`Tayyor: ${answer.vaqt.jami} s`);
   } catch (error) {
     setStatus(error.message, true);
   } finally {
     clearInterval(timer);
     $("run").disabled = false;
   }
+}
+
+/** Fayl maydonida qaysi fayl ko'rsatilsin (papkadan ochilganda ham nomi ko'rinib tursin). */
+function setFiles(id, file) {
+  const transfer = new DataTransfer();
+  if (file) transfer.items.add(file);
+  $(id).files = transfer.files;
 }
 
 function setStatus(text, isError = false) {
@@ -105,12 +80,11 @@ function renderLegend() {
 
 // ── Chap: sahifalar va ramkalar ──
 function renderPages() {
-  const flags = new Set(answer.tekshirish_kerak || []);
   const pages = (answer.rasmlar || []).map((src, i) => {
     const page = el("div", { className: "page" }, el("img", { src, alt: `${i + 1}-sahifa` }));
     for (const field of FIELDS) {
       for (const b of answer.joylar?.[field.key] || []) {
-        if (b.sahifa === i + 1) page.append(boxElement(field, b, flags.has(field.key)));
+        if (b.sahifa === i + 1) page.append(boxElement(field, b, isFlagged(answer, field.key)));
       }
     }
     page.append(el("span", { className: "page-no" }, `${i + 1}-sahifa`));
@@ -143,13 +117,12 @@ function boxElement(field, b, flagged) {
 }
 
 function highlight(key, on) {
-  document.querySelectorAll(`[data-field="${key}"]`).forEach((n) => n.classList.toggle("active", on));
+  document.querySelectorAll(`#single [data-field="${key}"]`).forEach((n) => n.classList.toggle("active", on));
 }
 
 // ── O'ng: maydonlar ──
 function renderFields() {
-  const flags = new Set(answer.tekshirish_kerak || []);
-  $("fields").replaceChildren(...FIELDS.map((f) => fieldCard(f, flags.has(f.key))));
+  $("fields").replaceChildren(...FIELDS.map((f) => fieldCard(f, isFlagged(answer, f.key))));
 }
 
 function fieldCard(field, flagged) {
@@ -184,7 +157,7 @@ function fieldCard(field, flagged) {
   card.addEventListener("mouseenter", () => highlight(field.key, true));
   card.addEventListener("mouseleave", () => highlight(field.key, false));
   input.addEventListener("focus", () => {
-    const box = document.querySelector(`.box[data-field="${field.key}"]`);
+    const box = document.querySelector(`#single .box[data-field="${field.key}"]`);
     if (box) box.scrollIntoView({ block: "center", behavior: "smooth" });
   });
   return card;
@@ -210,13 +183,7 @@ function confirmRow(input) {
     }
     button.disabled = true;
     try {
-      const response = await fetch("/confirm", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ blank_id: answer.blank_id, nom }),
-      });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.detail || `Server xatosi (${response.status})`);
+      await confirmSender(answer.blank_id, nom);
       note.textContent = "Saqlandi: bu tashkilotning keyingi xatlari avtomatik taniladi.";
     } catch (error) {
       note.textContent = error.message;
@@ -248,6 +215,3 @@ async function copyJson() {
   }
   setTimeout(() => ($("copy").textContent = "Nusxa olish"), 1500);
 }
-
-$("upload").addEventListener("submit", analyze);
-$("copy").addEventListener("click", copyJson);

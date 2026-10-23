@@ -5,42 +5,99 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Xalqaro xatlar — rekvizitlar</title>
   <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/app.js" defer></script>
+  <script type="module" src="/static/js/main.js"></script>
 </head>
 <body>
   <header class="top">
     <h1>Xalqaro xatlar <span>rekvizitlar va boshqarma</span></h1>
     <p class="note">Oflayn ishlaydi · PDF diskka yozilmaydi · faqat 1–6-sahifa o'qiladi</p>
+    <nav class="tabs" role="tablist">
+      <button type="button" id="tab-single" role="tab" aria-selected="true">Bitta xat</button>
+      <button type="button" id="tab-batch" role="tab" aria-selected="false">Papka (katalog)</button>
+    </nav>
   </header>
 
   <main>
-    <form id="upload" class="panel upload">
-      <label class="file">
-        <span>Xat (PDF)</span>
-        <input type="file" id="pdf" accept="application/pdf,.pdf" required>
-      </label>
-      <label class="file">
-        <span>To'g'ri javob (json) — ixtiyoriy, solishtirish uchun</span>
-        <input type="file" id="truth" accept="application/json,.json">
-      </label>
-      <button type="submit" id="run">Tahlil qilish</button>
-      <p id="status" class="status" role="status" aria-live="polite"></p>
-    </form>
+    <!-- ── Bitta xat ── -->
+    <section id="single">
+      <form id="upload" class="panel upload">
+        <label class="file">
+          <span>Xat (PDF)</span>
+          <input type="file" id="pdf" accept="application/pdf,.pdf" required>
+        </label>
+        <label class="file">
+          <span>To'g'ri javob (json) — ixtiyoriy, solishtirish uchun</span>
+          <input type="file" id="truth" accept="application/json,.json">
+        </label>
+        <button type="submit" id="run">Tahlil qilish</button>
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+      </form>
 
-    <section id="result" class="result" hidden>
-      <div class="panel pages-panel">
-        <div id="legend" class="legend"></div>
-        <div id="pages" class="pages"></div>
+      <div id="result" class="result" hidden>
+        <div class="panel pages-panel">
+          <div id="legend" class="legend"></div>
+          <div id="pages" class="pages"></div>
+        </div>
+
+        <div class="panel fields-panel">
+          <div id="meta" class="meta"></div>
+          <div id="fields"></div>
+          <details class="final">
+            <summary>Yakuniy JSON (xodim tekshirgan qiymatlar)</summary>
+            <pre id="json"></pre>
+            <button type="button" id="copy" class="secondary">Nusxa olish</button>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── Papka: barcha xatlar ketma-ket ── -->
+    <section id="batch" hidden>
+      <div class="panel upload">
+        <label class="file">
+          <span>Papka: har xat o'z papkasida (PDF + json) yoki PDF'lar bitta papkada</span>
+          <input type="file" id="folder" webkitdirectory multiple>
+        </label>
+        <button type="button" id="batch-run" disabled>Boshlash</button>
+        <button type="button" id="batch-stop" class="secondary" disabled>To'xtatish</button>
+        <p id="batch-status" class="status" role="status" aria-live="polite"></p>
       </div>
 
-      <div class="panel fields-panel">
-        <div id="meta" class="meta"></div>
-        <div id="fields"></div>
-        <details class="final">
-          <summary>Yakuniy JSON (xodim tekshirgan qiymatlar)</summary>
-          <pre id="json"></pre>
-          <button type="button" id="copy" class="secondary">Nusxa olish</button>
-        </details>
+      <div id="batch-result" class="panel" hidden>
+        <progress id="batch-progress" value="0" max="1"></progress>
+        <p id="batch-time" class="meta"></p>
+
+        <div id="batch-summary" hidden>
+          <h2>Umumiy natija (to'g'ri javob bilan solishtirilgan xatlar)</h2>
+          <table class="summary">
+            <thead>
+              <tr>
+                <th>Maydon</th>
+                <th title="To'g'ri / hamma xat">Aniqlik</th>
+                <th title="AI javob bergan / hamma xat">Qamrov</th>
+                <th title="To'g'ri / AI javob bergan">Ishonchlilik</th>
+                <th title="Maydon bo'sh, lekin taklif to'g'ri">Taklif to'g'ri</th>
+              </tr>
+            </thead>
+            <tbody id="batch-summary-rows"></tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap">
+          <table class="letters">
+            <thead>
+              <tr>
+                <th>#</th><th>Xat</th><th>Vaqt, s</th><th>OCR, s</th>
+                <th>Jo'natuvchi</th><th>Sana</th><th>Raqam</th><th>Imzo</th><th>Mazmun</th>
+                <th>Boshqarma</th><th title="Tekshirish kerak maydonlar soni">⚠</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="batch-rows"></tbody>
+          </table>
+        </div>
+        <p class="hint">✓ to'g'ri · ✗ xato · – AI yozmagan (tekshirish kerak) · t✓ / t✗ — taklif
+          to'g'ri / xato · json bo'lmasa: • yozildi, ⚠ tekshirish kerak</p>
+        <button type="button" id="batch-csv" class="secondary" disabled>CSV yuklab olish</button>
       </div>
     </section>
   </main>
