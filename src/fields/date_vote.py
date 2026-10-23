@@ -84,3 +84,10 @@ def in_window(value: str | None, received: Date | None, days: int | None) -> boo
         return value is not None
     day = to_day(value)
     return day is not None and 0 <= (received - day).days <= days
+
+
+def windowed(
+    found: dict[str, str | None], received: Date | None, days: int | None = WINDOW_DAYS
+) -> dict[str, str | None]:
+    """Nomzodlardan oynadan tashqaridagilarni olib tashlaydi (None qiladi)."""
+    return {k: (v if in_window(v, received, days) else None) for k, v in found.items()}

@@ -40,6 +40,7 @@ from src.fields.date_vote import (
     ranked,
     to_day,
     vote,
+    windowed,
 )
 
 S5 = "S5 1-OCR + tasdiq"
@@ -76,9 +77,9 @@ def main() -> None:
         found = [engine_dates(texts[r].get(doc_id, {})) for r in args.readers]
         if not in_window(text_layer, received, args.window):
             text_layer = None
-        for f in found:  # oraliqdan tashqaridagi sanalar — nomzod emas
-            for key, value in f.items():
-                f[key] = value if in_window(value, received, args.window) else None
+        found = [
+            windowed(f, received, args.window) for f in found
+        ]  # oynadan tashqarisi — nomzod emas
         auto = {
             "S0 hozirgi (matn qatlami)": text_layer,
             "S1 + 1-OCR date bo'lagi": text_layer or found[0]["date"],
