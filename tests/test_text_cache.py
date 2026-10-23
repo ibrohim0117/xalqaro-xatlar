@@ -24,6 +24,13 @@ def test_extract_scanned_pdf_uses_ocr_everywhere(scanned_pdf):
 
 
 @needs_tesseract
+def test_extract_from_bytes_and_only_first_pages(letter_pdf):
+    from_bytes = extract_pages(letter_pdf.read_bytes(), max_pages=1)  # API: PDF xotiradan
+    assert len(from_bytes) == 1  # 2-sahifa (ilova) o'qilmadi
+    assert from_bytes[0].main.text == extract_pages(letter_pdf)[0].main.text
+
+
+@needs_tesseract
 def test_save_and_load_give_the_same_pages(letter_pdf, tmp_path):
     pages = extract_pages(letter_pdf)
     path = tmp_path / "kesh.json"

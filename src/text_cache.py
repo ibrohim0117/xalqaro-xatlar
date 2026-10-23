@@ -47,12 +47,17 @@ class CachedPage:
         return self.text_layer
 
 
-def extract_pages(pdf: Path) -> list[CachedPage]:
-    """PDF'dan hamma sahifani o'qiydi: matn qatlami har doim, OCR faqat kerakli sahifalarda."""
+def extract_pages(pdf: Path | bytes, max_pages: int | None = None) -> list[CachedPage]:
+    """PDF'dan sahifalarni o'qiydi: matn qatlami har doim, OCR faqat kerakli sahifalarda.
+    pdf — fayl yo'li yoki baytlar (API: yuklangan PDF diskka yozilmaydi, xotiradan ochiladi).
+    max_pages — faqat dastlabki N sahifa (None — hammasi, kesh uchun)."""
     pages = []
-    with pymupdf.open(pdf) as doc:
+    doc = pymupdf.open(stream=pdf, filetype="pdf") if isinstance(pdf, bytes) else pymupdf.open(pdf)
+    with doc:
         for i, page in enumerate(doc):
             number = i + 1
+            if max_pages is not None and number > max_pages:
+                break
             words = text_layer_words(page)
             need_ocr = number == 1 or not has_text_layer(words)
             ocr = ocr_page(page, number) if need_ocr else None
