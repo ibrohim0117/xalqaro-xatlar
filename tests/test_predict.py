@@ -119,3 +119,28 @@ def test_missing_signer_is_flagged():
     answer = predict(pages_of("Ферганская область"), MODEL)
     assert answer["rekvizit_document"]["imzolagan_shaxs"] is None
     assert "imzolagan_shaxs" in answer["tekshirish_kerak"]
+
+
+def test_date_is_filled_and_number_only_suggested():
+    words = [
+        Word("05.12.2025", 0.1, 0.3, 0.2, 0.31, 0),
+        Word("№", 0.3, 0.3, 0.32, 0.31, 0),
+        Word("54/07-16606", 0.33, 0.3, 0.45, 0.31, 0),
+        Word("Ферганская", 0.1, 0.5, 0.2, 0.51, 1),
+        Word("область", 0.21, 0.5, 0.3, 0.51, 1),
+    ]
+    answer = predict([CachedPage(1, PageText(1, "text_layer", words), None)], MODEL)
+    assert answer["rekvizit_document"]["hujjat_sana"] == "05.12.2025"  # matn qatlamidan
+    assert answer["rekvizit_document"]["hujjat_raqami"] is None  # raqam avtomatik yozilmaydi
+    assert answer["takliflar"] == {"hujjat_raqami": "54/07-16606"}
+    assert "hujjat_raqami" in answer["tekshirish_kerak"]
+    assert "hujjat_sana" not in answer["tekshirish_kerak"]
+
+
+def test_ocr_only_date_is_a_suggestion():
+    words = [Word("05.12.2025", 0.1, 0.3, 0.2, 0.31, 0), Word("№", 0.3, 0.3, 0.32, 0.31, 0)]
+    page = CachedPage(1, PageText(1, "text_layer", []), PageText(1, "ocr", words))
+    answer = predict([page], MODEL)
+    assert answer["rekvizit_document"]["hujjat_sana"] is None
+    assert answer["takliflar"] == {"hujjat_sana": "05.12.2025"}
+    assert "hujjat_sana" in answer["tekshirish_kerak"]

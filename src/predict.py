@@ -1,4 +1,4 @@
-"""B4.4, B5.1, B5.2: bitta xat uchun AI javobi — boshqarma, jo'natuvchi, imzo, qisqacha mazmun.
+"""B4.4, B5.1–B5.3: bitta xat uchun AI javobi — boshqarma, jo'natuvchi, imzo, sana, mazmun.
 
 "Model" — dev xatlardan o'rganilgan qiymatlar: har hudud (va notariat) uchun boshqarmaning to'liq
 nomi, eng ko'p uchraydigan qisqacha mazmun va jo'natuvchini topish uchun dev xatlari 1-sahifasining
@@ -15,6 +15,7 @@ from pathlib import Path
 from src.baseline import most_common
 from src.boshqarma import predict_group
 from src.dataset import expected_boshqarma, group_of
+from src.date_number import date_number_answer
 from src.evaluate import REKVIZIT_FIELDS, normalize
 from src.regions import REGIONS, region_of_boshqarma
 from src.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text, prune
@@ -106,8 +107,14 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         rekvizit["imzolagan_shaxs"] = signer.latin()
     else:  # imzo matnda o'qilmagan (qo'lda, shtamp) yoki shakli boshqacha
         flags.append("imzolagan_shaxs")
+    # Sana: matn qatlamidan topilsa avtomatik; raqam — doim xodim tekshiradi (faqat taklif)
+    rekvizit["hujjat_sana"], suggestions = date_number_answer(pages[0])
+    if not rekvizit["hujjat_sana"]:
+        flags.append("hujjat_sana")
+    flags.append("hujjat_raqami")
     return {
         "rekvizit_document": rekvizit,
         "tasks": [{"asosiy_ijrochilar_boshqarmalari": [name] if name else []}],
         "tekshirish_kerak": flags,
+        "takliflar": suggestions,  # AI o'qigan, lekin maydonga yozilmagan qiymatlar
     }
