@@ -4,6 +4,7 @@ Joy nisbiy: chap-yuqori burchak (0, 0), o'ng-past burchak (1, 1). Shunda matn qa
 (punktlarda) va OCR (piksellarda) natijalari bir xil o'lchovda bo'ladi.
 """
 
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -102,8 +103,8 @@ def ocr_words(image: np.ndarray, lang: str = "rus") -> list[Word]:
     return words
 
 
-def ocr_page(page: pymupdf.Page, number: int) -> PageText:
-    return PageText(number, "ocr", ocr_words(binarize(page_image(page))))
+def ocr_page(page: pymupdf.Page, number: int, lang: str = "rus") -> PageText:
+    return PageText(number, "ocr", ocr_words(binarize(page_image(page)), lang))
 
 
 def read_ocr(pdf: Path, max_pages: int | None = None) -> list[PageText]:
@@ -117,6 +118,31 @@ def read_ocr(pdf: Path, max_pages: int | None = None) -> list[PageText]:
 
 def has_text_layer(words: list[Word]) -> bool:
     return sum(len(word.text) for word in words) >= TEXT_LAYER_MIN_CHARS
+
+
+# "Toza" so'z: faqat kirill yoki faqat lotin harflari (o'zbekcha o', g' bilan) va tinish belgilari
+CLEAN_WORD = re.compile(r"^[«(\"']?(?:[А-Яа-яЁёЎўҚқҒғҲҳ-]+|[A-Za-z'ʻ’`-]+)[.,;:!?)»\"']*$")
+HAS_LETTER = re.compile(r"[А-Яа-яЁёЎўҚқҒғҲҳA-Za-z]")
+
+
+MIN_LETTERS = 3  # "Ш", "ии" kabi bo'laklar bahoni ko'tarmasin
+OCR_CONF_MIN = 60  # OCR so'zi shundan past ishonch bilan o'qilgan bo'lsa — toza emas
+
+
+def is_clean(word: Word) -> bool:
+    """Faqat kirill yoki faqat lotin harflari; OCR'da esa ishonchi ham yetarli bo'lishi kerak.
+    Ma'nosiz OCR so'zlari ("SJCQJBO") ham harflardan iborat — ularni past ishonch ajratadi."""
+    sure = word.conf is None or word.conf >= OCR_CONF_MIN
+    return sure and bool(CLEAN_WORD.match(word.text))
+
+
+def text_quality(words: list[Word]) -> float:
+    """Kamida 3 harfli so'zlarning qanchasi "toza" (0..1). Oddiy matnda yuqori, axlatda past.
+    Raqamlar (sana, telefon) hisobga olinmaydi — ularda harf yo'q."""
+    lettered = [w for w in words if len(HAS_LETTER.findall(w.text)) >= MIN_LETTERS]
+    if not lettered:
+        return 0.0
+    return sum(is_clean(w) for w in lettered) / len(lettered)
 
 
 def read_pdf(pdf: Path, max_pages: int | None = None) -> list[PageText]:

@@ -4,8 +4,9 @@ import json
 
 from src import text_cache
 from src.dataset import Letter
+from src.pdf_text import text_quality
 from src.text_cache import extract_pages, get_pages, load, save
-from tests.conftest import needs_tesseract
+from tests.conftest import make_garbage_layer_pdf, needs_tesseract, needs_uzb
 
 
 @needs_tesseract
@@ -51,3 +52,11 @@ def test_get_pages_reads_pdf_only_once(letter_pdf, tmp_path, monkeypatch):
 
     monkeypatch.setattr(text_cache, "extract_pages", must_not_run)
     assert get_pages(letter, cache_dir=tmp_path) == first
+
+
+@needs_uzb
+def test_garbage_text_layer_is_reread_with_uzbek(tmp_path):
+    (page,) = extract_pages(make_garbage_layer_pdf(tmp_path / "guvohnoma.pdf"))
+    assert text_quality(page.text_layer.words) < 0.5  # axlat matn qatlami
+    assert page.main.source == "ocr"  # qayta o'qilgan matn tanlandi
+    assert "Toshkent" in page.main.text and "Yunusobod" in page.main.text

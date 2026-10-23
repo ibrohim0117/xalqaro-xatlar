@@ -1,6 +1,6 @@
 """src/pdf_text.py testlari — faqat soxta xat bilan (tests/conftest.py)."""
 
-from src.pdf_text import PageText, read_ocr, read_pdf, read_text_layer
+from src.pdf_text import PageText, Word, read_ocr, read_pdf, read_text_layer, text_quality
 from tests.conftest import needs_tesseract
 
 
@@ -52,3 +52,22 @@ def test_ocr_reads_scanned_letter_with_positions(scanned_pdf):
 def test_read_pdf_picks_source_per_page(letter_pdf, scanned_pdf):
     assert [p.source for p in read_pdf(letter_pdf)] == ["text_layer", "ocr"]  # 2-sahifa < 50 belgi
     assert [p.source for p in read_pdf(scanned_pdf)] == ["ocr", "ocr"]
+
+
+def words_of(text: str) -> list[Word]:
+    return [Word(token, 0, 0, 1, 1, 0) for token in text.split()]
+
+
+def test_text_quality_ignores_unsure_ocr_words_and_short_bits():
+    sure = [Word("Министерство", 0, 0, 1, 1, 0, 90.0), Word("юстиции", 0, 0, 1, 1, 0, 85.0)]
+    unsure = [Word("SJCQJBO", 0, 0, 1, 1, 0, 30.0), Word("ЖШМШЧ", 0, 0, 1, 1, 0, 41.0)]
+    assert text_quality(sure) == 1.0
+    assert text_quality(sure + unsure) == 0.5  # harflardan iborat, lekin ishonch past
+    assert text_quality(words_of("f А I ии Ш")) == 0.0  # 3 harfdan kam — hisobga olinmaydi
+
+
+def test_text_quality_separates_clean_text_from_garbage():
+    assert text_quality(words_of("Главное управление Министерства юстиции (далее - ГУ)")) == 1.0
+    assert text_quality(words_of("Toshkent shahar Yunusobod tumani FHDYO bo'limi")) == 1.0
+    assert text_quality(words_of("^Г.:УлВ Ptfuas^'•:ЛОО<? TV3'iIganj9j1y f'^;i")) == 0.0
+    assert text_quality(words_of("05.12.2025 № 54/07-16606")) == 0.0  # harfli so'z yo'q

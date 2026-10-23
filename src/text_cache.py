@@ -4,10 +4,12 @@ OCR sekin (~2.2 s/sahifa), B4–B5 esa kodni ko'p marta ishga tushiradi. Shuning
 matni bir marta olinadi va outputs/text_cache/<DOC_id>.json ga yoziladi.
 MAXFIYLIK: keshda real xat matni bor — gitignore'da, Claude ochmaydi.
 
-Nima saqlanadi (B3.3 xulosasi bo'yicha):
+Nima saqlanadi (B3.3 va B3.5 xulosalari bo'yicha):
 - hamma sahifa: matn qatlami (bir zumda);
 - 1-sahifa: OCR ham — "№" langarini OCR yaxshiroq topadi (80% ga qarshi 65%);
-- matn qatlami yo'q sahifalar: OCR.
+- matn qatlami yo'q sahifalar: OCR;
+- eng yaxshi matn sifati 0.7 dan past sahifalar: rus+uzb bilan qayta OCR (lotin yozuvidagi
+  FHDYO guvohnomalari va h.k.; dev'da matn qatlami sahifalarining 15% i 0.6 dan past).
 """
 
 import json
@@ -17,24 +19,32 @@ from pathlib import Path
 import pymupdf
 
 from src.dataset import Letter
-from src.pdf_text import PageText, Word, has_text_layer, ocr_page, text_layer_words
+from src.pdf_text import PageText, Word, has_text_layer, ocr_page, text_layer_words, text_quality
 
 CACHE_DIR = Path("outputs/text_cache")
-CACHE_VERSION = 1  # OCR sozlamalari o'zgarsa oshiriladi — eski kesh fayllari qayta yasaladi
+CACHE_VERSION = 3  # OCR sozlamalari o'zgarsa oshiriladi — eski kesh fayllari qayta yasaladi
+QUALITY_MIN = 0.7  # eng yaxshi matn sifati shundan past bo'lsa — rus+uzb bilan qayta OCR
+LATIN_LANG = "rus+uzb"  # o'zbek lotin yozuvini ham o'qiydi
+MAIN_MARGIN = 0.02  # OCR shunchalik tozaroq bo'lsagina matn qatlami o'rniga olinadi
+RETRY_MIN_WORDS = 10  # bo'sh yoki deyarli bo'sh sahifa qayta o'qilmaydi
 
 
 @dataclass
 class CachedPage:
     number: int
     text_layer: PageText
-    ocr: PageText | None  # faqat 1-sahifa va matn qatlami yo'q sahifalar uchun
+    ocr: PageText | None  # 1-sahifa, matn qatlami yo'q yoki sifati past sahifalar uchun
 
     @property
     def main(self) -> PageText:
-        """Asosiy matn (read_pdf qoidasi): matn qatlami yetarli bo'lsa o'sha, bo'lmasa OCR."""
-        if self.ocr is None or has_text_layer(self.text_layer.words):
+        """Asosiy matn: matn qatlami va OCR'dan tozarog'i. Teng bo'lsa — matn qatlami."""
+        if self.ocr is None:
             return self.text_layer
-        return self.ocr
+        if not has_text_layer(self.text_layer.words):
+            return self.ocr
+        if text_quality(self.ocr.words) > text_quality(self.text_layer.words) + MAIN_MARGIN:
+            return self.ocr
+        return self.text_layer
 
 
 def extract_pages(pdf: Path) -> list[CachedPage]:
@@ -46,7 +56,13 @@ def extract_pages(pdf: Path) -> list[CachedPage]:
             words = text_layer_words(page)
             need_ocr = number == 1 or not has_text_layer(words)
             ocr = ocr_page(page, number) if need_ocr else None
-            pages.append(CachedPage(number, PageText(number, "text_layer", words), ocr))
+            cached = CachedPage(number, PageText(number, "text_layer", words), ocr)
+            main = cached.main
+            if len(main.words) >= RETRY_MIN_WORDS and text_quality(main.words) < QUALITY_MIN:
+                latin = ocr_page(page, number, lang=LATIN_LANG)
+                if ocr is None or text_quality(latin.words) > text_quality(ocr.words):
+                    cached.ocr = latin
+            pages.append(cached)
     return pages
 
 
