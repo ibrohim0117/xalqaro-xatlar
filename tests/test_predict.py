@@ -108,6 +108,11 @@ def test_unknown_sender_is_flagged_not_guessed():
     answer = predict(letter_with_blank(blank), SENDER_MODEL)
     assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] is None
     assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]
+    # o'rniga xodimga o'zbekcha variantlar taklif qilinadi
+    assert (
+        "Moldova Respublikasi Davlat xizmatlari agentligi"
+        in (answer["takliflar"]["hujjat_junatuvchi_tashkilot"])
+    )
 
 
 def test_predict_signer_from_letter_end():

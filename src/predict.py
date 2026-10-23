@@ -19,6 +19,7 @@ from src.date_number import date_number_answer
 from src.evaluate import REKVIZIT_FIELDS, normalize
 from src.regions import REGIONS, region_of_boshqarma
 from src.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, blank_words, header_text
+from src.sender_variants import page_variants
 from src.signer import SIGNER_MIN_Y, SIGNER_PAGES, candidates, choose_signer
 from src.text_cache import CachedPage
 
@@ -95,20 +96,26 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         flags.append("boshqarma")
     rekvizit = dict.fromkeys(REKVIZIT_FIELDS)
     rekvizit["hujjatning_qisqacha_mazmuni"] = model.summary
-    if model.sender_texts:
-        matcher = Matcher(model.sender_texts, model.sender_names)
-        sender, score = matcher.best(header_text(pages, SENDER_MODE))
-        if score >= SENDER_THRESHOLD:
-            rekvizit["hujjat_junatuvchi_tashkilot"] = sender
-        else:  # notanish jo'natuvchi — taxmin yozilmaydi
-            flags.append("hujjat_junatuvchi_tashkilot")
+    suggestions: dict = {}  # AI o'qigan/tarjima qilgan, lekin maydonga yozilmagan qiymatlar
+    sender, score = (
+        Matcher(model.sender_texts, model.sender_names).best(header_text(pages, SENDER_MODE))
+        if model.sender_texts
+        else (None, 0.0)
+    )
+    if sender and score >= SENDER_THRESHOLD:
+        rekvizit["hujjat_junatuvchi_tashkilot"] = sender
+    else:  # notanish: taxmin yozilmaydi, xodimga o'zbekcha nom variantlari taklif qilinadi
+        flags.append("hujjat_junatuvchi_tashkilot")
+        if variants := page_variants(pages):
+            suggestions["hujjat_junatuvchi_tashkilot"] = variants
     signer = choose_signer(candidates(pages, SIGNER_PAGES), min_y=SIGNER_MIN_Y)
     if signer:
         rekvizit["imzolagan_shaxs"] = signer.latin()
     else:  # imzo matnda o'qilmagan (qo'lda, shtamp) yoki shakli boshqacha
         flags.append("imzolagan_shaxs")
     # Sana: matn qatlamidan topilsa avtomatik; raqam — doim xodim tekshiradi (faqat taklif)
-    rekvizit["hujjat_sana"], suggestions = date_number_answer(pages[0])
+    rekvizit["hujjat_sana"], date_suggestions = date_number_answer(pages[0])
+    suggestions.update(date_suggestions)
     if not rekvizit["hujjat_sana"]:
         flags.append("hujjat_sana")
     flags.append("hujjat_raqami")
@@ -116,5 +123,5 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         "rekvizit_document": rekvizit,
         "tasks": [{"asosiy_ijrochilar_boshqarmalari": [name] if name else []}],
         "tekshirish_kerak": flags,
-        "takliflar": suggestions,  # AI o'qigan, lekin maydonga yozilmagan qiymatlar
+        "takliflar": suggestions,
     }
