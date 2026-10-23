@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.fields.date_number import date_and_number, parse_date, plausible_number
+from src.fields.date_number import date_and_number, is_date_token, parse_date, plausible_number
 from src.reading.pdf_text import PageText, Word
 
 
@@ -84,3 +84,16 @@ def test_copy_recipient_date_after_ot_is_skipped():
 )
 def test_plausible_number(value, expected):
     assert plausible_number(value) is expected
+
+
+@pytest.mark.parametrize(
+    ("token", "expected"),
+    [
+        ("05.12.2025", True),
+        ("17/08-10/2934", False),
+        ("3-3-28/16847", False),
+        ("54/07-16606", False),
+    ],
+)
+def test_is_date_token(token, expected):
+    assert is_date_token(token) is expected

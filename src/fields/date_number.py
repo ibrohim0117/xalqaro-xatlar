@@ -78,6 +78,12 @@ def parse_date(text: str, skip_after_ot: bool = False) -> str | None:
     return None
 
 
+def is_date_token(token: str) -> bool:
+    """So'z BUTUNLIGICHA sanami: "05.12.2025" — ha. "17/08-10/2934", "3-3-28/16847" — yo'q: ichida
+    sanaga o'xshash bo'lak bor ("17/08-10" -> 17.08.2010), lekin raqam guruhlari 3 tadan ko'p."""
+    return len(re.findall(r"\d+", token)) == 3 and parse_date(token) is not None
+
+
 def find_anchor(words: list[Word]) -> int | None:
     """Sana-raqam qatoridagi "№": yuqori yarmida, eng yuqoridagisi, "На №" emas."""
     found = [
