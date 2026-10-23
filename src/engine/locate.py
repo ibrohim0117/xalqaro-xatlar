@@ -9,12 +9,15 @@ raqam aynan shu yerda bo'ladi — xodim o'zi o'qiydi.
 from src.fields.boshqarma import evidence_lines, predict_group
 from src.fields.date_number import anchor_of
 from src.fields.layout import sender_block
+from src.fields.reply import reply_anchor_of
 from src.fields.signer import find_signer
 from src.reading.pages import CachedPage
 from src.reading.pdf_text import Word
 
 LINE_PAD = 0.012  # "№" qatori ramkasi yuqori-pastga kengroq: qo'lyozma qatordan chiqib turadi
 HANDWRITING_WIDTH = 0.22  # bosma so'z bo'lmasa — "№" dan chapga (sana) va o'ngga (raqam) joy
+REPLY_BEFORE = 0.06  # "На" so'zi "№" dan chapda
+REPLY_WIDTH = 0.45  # "На № ____ от ____": raqam ham, sana ham "№" dan o'ngda
 
 
 def _clip(value: float) -> float:
@@ -48,6 +51,21 @@ def date_number_boxes(first: CachedPage) -> dict[str, list[dict]]:
         "hujjat_sana": [box(1, left, y0, anchor.x0, y1)],
         "hujjat_raqami": [box(1, anchor.x0, y0, right, y1)],
     }
+
+
+def reply_box(first: CachedPage) -> dict | None:
+    """ "На № … от …" qatori: javob xatda bizning oldingi xatimiz raqami va sanasi
+    (ko'pincha qo'lda yozilgan)."""
+    anchor = reply_anchor_of(first)
+    if anchor is None:
+        return None
+    return box(
+        1,
+        anchor.x0 - REPLY_BEFORE,
+        anchor.y0 - LINE_PAD,
+        anchor.x0 + REPLY_WIDTH,
+        anchor.y1 + LINE_PAD,
+    )
 
 
 def locate(pages: list[CachedPage]) -> dict[str, list[dict]]:

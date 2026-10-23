@@ -96,16 +96,11 @@ def find_anchor(words: list[Word]) -> int | None:
     return min(found, key=lambda i: words[i].y0, default=None)
 
 
-def find_number(words: list[Word], anchor: int) -> str | None:
-    """Langardan keyin, o'sha qatorda: "№ 54/07-16606" yoki yopishgan "№01/301495"."""
-    a = words[anchor]
-    rest = ANCHOR.sub("", a.text)  # "№01/301495" -> "01/301495"
-    after = sorted(
-        (w for w in words if abs(w.y0 - a.y0) <= SAME_LINE and w.x0 > a.x0),
-        key=lambda w: w.x0,
-    )
-    for token in [rest] + [w.text for w in after]:
-        if token.lower().startswith("от"):  # "№ ___ от ___" — raqam yo'q
+def number_in(tokens: list[str]) -> str | None:
+    """So'zlar ichidan birinchi raqam ("№" dan keyingi so'zlar yoki OCR matni). "от" gacha
+    qidiriladi: "№ ___ от ___" — raqam yo'q."""
+    for token in tokens:
+        if token.lower().startswith("от"):
             return None
         m = NUMBER.search(token)
         # is_date_token: "3-3-28/16847" ichidagi "3-3-28" sanaga o'xshasa ham — bu raqam
@@ -114,6 +109,25 @@ def find_number(words: list[Word], anchor: int) -> str | None:
             # "52/05-" — bosma boshi, davomi qo'lda yozilgan va o'qilmagan: chala raqam yozilmaydi
             return None if number.endswith(("-", "/")) else number
     return None
+
+
+def find_number(words: list[Word], anchor: int) -> str | None:
+    """Langardan keyin, o'sha qatorda: "№ 54/07-16606" yoki yopishgan "№01/301495"."""
+    a = words[anchor]
+    rest = ANCHOR.sub("", a.text)  # "№01/301495" -> "01/301495"
+    after = sorted(
+        (w for w in words if abs(w.y0 - a.y0) <= SAME_LINE and w.x0 > a.x0),
+        key=lambda w: w.x0,
+    )
+    return number_in([rest] + [w.text for w in after])
+
+
+def parse_number(text: str) -> str | None:
+    """OCR o'qigan erkin matndan raqam (B5.3b: kesilgan bo'lak): "30.09.26 № 3-3-28/16847" ->
+    "3-3-28/16847". Sana so'zlari o'tkazib yuboriladi, "№" belgisi olib tashlanadi. "№" atrofiga
+    bo'shliq qo'yiladi: OCR ba'zan qatorni bo'shliqsiz beradi ("12.03.2026№55/07-1234")."""
+    tokens = text.replace("№", " № ").split()
+    return number_in([ANCHOR.sub("", token) for token in tokens])
 
 
 def find_date(words: list[Word], anchor: int) -> str | None:

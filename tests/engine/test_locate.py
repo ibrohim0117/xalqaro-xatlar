@@ -3,7 +3,7 @@
 import pymupdf
 import pytest
 
-from src.engine.locate import locate
+from src.engine.locate import locate, reply_box
 from src.reading.pages import CachedPage
 from src.reading.pdf_text import PageText, text_layer_words
 from tests.conftest import FAKE_LETTER, make_letter_pdf
@@ -54,3 +54,11 @@ def test_unknown_region_and_signer_have_no_box(tmp_path):
     letter = [line for line in FAKE_LETTER if "Ферган" not in line[2] and "Сидоров" not in line[2]]
     boxes = locate(pages_of(make_letter_pdf(tmp_path / "xat.pdf", letter)))
     assert "boshqarma" not in boxes and "imzolagan_shaxs" not in boxes
+
+
+def test_reply_line_box(tmp_path):
+    letter = [*FAKE_LETTER, (50, 130, "На № ___ от ___")]  # javob xat qatori (qo'lda to'ldiriladi)
+    reply = reply_box(pages_of(make_letter_pdf(tmp_path / "xat.pdf", letter))[0])
+    assert inside(reply, 75, 130)  # "№" va undan o'ngdagi joy
+    assert reply["x1"] - reply["x0"] >= 0.45
+    assert reply_box(pages_of(make_letter_pdf(tmp_path / "oddiy.pdf"))[0]) is None

@@ -2,7 +2,13 @@
 
 import pytest
 
-from src.fields.date_number import date_and_number, is_date_token, parse_date, plausible_number
+from src.fields.date_number import (
+    date_and_number,
+    is_date_token,
+    parse_date,
+    parse_number,
+    plausible_number,
+)
 from src.reading.pdf_text import PageText, Word
 
 
@@ -104,3 +110,19 @@ def test_plausible_number(value, expected):
 )
 def test_is_date_token(token, expected):
     assert is_date_token(token) is expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("30.09.26 № 3-3-28/16847", "3-3-28/16847"),  # butun qator: sana o'tkazib yuboriladi
+        ("№01/301495", "01/301495"),
+        ("12.03.2026№55/07-1234", "55/07-1234"),  # OCR bo'shliqsiz bergan qator
+        ("54/07-16606", "54/07-16606"),  # faqat raqam bo'lagi
+        ("№ ___ от ___", None),
+        ("52/05-", None),  # chala
+        ("", None),
+    ],
+)
+def test_parse_number_from_ocr_text(text, expected):
+    assert parse_number(text) == expected

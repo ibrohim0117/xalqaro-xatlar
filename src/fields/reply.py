@@ -39,13 +39,24 @@ def is_reply_anchor(words: list[Word], i: int) -> bool:
     return any(TRAP_BEFORE.match(w.text.strip(".,")) for w in before)
 
 
+def find_reply_anchor(page: PageText) -> Word | None:
+    """ "На №" dagi "№" (eng yuqoridagisi)."""
+    found = [w for i, w in enumerate(page.words) if is_reply_anchor(page.words, i)]
+    return min(found, key=lambda w: w.y0, default=None)
+
+
+def reply_anchor_of(first: CachedPage) -> Word | None:
+    """Joyini ko'rsatish/kesish uchun: avval matn qatlami, keyin OCR."""
+    pages = (p for p in (first.text_layer, first.ocr) if p is not None)
+    return next((a for p in pages if (a := find_reply_anchor(p)) is not None), None)
+
+
 def reply_reference(page: PageText) -> tuple[str | None, str | None] | None:
     """(raqam, sana) "На №" qatoridan. Qator yo'q — None; bor, lekin bo'sh ("На № ___ от ___")
     yoki qo'lda yozilgani o'qilmagan — (None, None)."""
-    found = [i for i in range(len(page.words)) if is_reply_anchor(page.words, i)]
-    if not found:
+    anchor = find_reply_anchor(page)
+    if anchor is None:
         return None
-    anchor = page.words[min(found, key=lambda i: page.words[i].y0)]
     after = sorted(
         (w for w in page.words if abs(w.y0 - anchor.y0) <= SAME_LINE and w.x0 > anchor.x0),
         key=lambda w: w.x0,
