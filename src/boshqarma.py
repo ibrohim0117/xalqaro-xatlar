@@ -1,11 +1,16 @@
 """B4: xat matnidan boshqarmani aniqlash.
 
-B4.2 — hudud: qabul qiluvchi blokini (1-sahifa, o'ng yuqori) va vazirlik manzilini chetlab,
-qolgan matndagi hudud eslatmalari og'irligi bo'yicha eng kuchli hudud tanlanadi.
+B4.2 — hudud. 1-sahifaning o'ng yuqori bloki (qabul qiluvchi) va qolgan matn alohida qidiriladi:
+- o'ng blok butunlay chetga olinadi (dev: 48/57 to'g'ri). "Faqat Toshkentni chetlash" ham sinaldi
+  (xat viloyat organiga yozilgan bo'lishi mumkin degan gipoteza) — 47/57, yaxshilamadi;
+- qolgan matnda vazirlik manzili ("юстиции Республики Узбекистан", "Сайилгох") yonidagi
+  Toshkent hisobga olinmaydi.
+Hudud eslatmalari og'irligi bo'yicha eng kuchlisi tanlanadi.
 """
 
 import re
 from collections import defaultdict
+from dataclasses import replace
 
 from src.pdf_text import PageText, Word
 from src.regions import Hit, find_regions, prepare
@@ -14,9 +19,12 @@ from src.text_cache import CachedPage
 RIGHT_BLOCK_X = 0.45  # o'ng yarmi: qabul qiluvchi bloki shu yerda
 HEADER_FALLBACK_Y = 0.40  # "№" topilmasa — sarlavha shu balandlikkacha deb olinadi
 ANCHOR_MARGIN = 0.03  # "№" qatoridan biroz pastgacha
-# Vazirlikning o'z manzili: "... юстиции Республики Узбекистан ... г. Ташкент, ул. Сайилгох, 5"
 MINISTRY = re.compile(r"юстиции\s+республики\s+узбекистан")
-MINISTRY_STREET = re.compile(r"са[йи]{1,2}лго[хx]")
+# Vazirlik (Sayilgoh, 5) va Davlat xizmatlari agentligi (Amir Temur, 16A) manzillari
+MINISTRY_STREET = re.compile(r"са[йи]{1,2}лго[хx]|темура,?\s*16")
+# O'ng blok bilan nima qilinadi: "keep" — hisobga olinadi, "drop" — butunlay chiqariladi
+# (asosiy qoida), "tashkent" — faqat Toshkent shahri chiqariladi (sinalgan, yaxshilamadi)
+RECIPIENT_MODES = ("keep", "drop", "tashkent")
 
 
 def header_bottom(first: CachedPage) -> float:
@@ -31,19 +39,19 @@ def in_recipient_block(word: Word, bottom: float) -> bool:
     return word.x0 >= RIGHT_BLOCK_X and word.y0 < bottom
 
 
-def region_text(
-    pages: list[CachedPage], max_pages: int | None = None, drop_recipient: bool = True
-) -> str:
-    """Hudud qidiriladigan matn. 1-sahifada qabul qiluvchi bloki chiqarib tashlanadi."""
-    parts = []
+def recipient_and_body(pages: list[CachedPage], max_pages: int | None = None) -> tuple[str, str]:
+    """(qabul qiluvchi bloki matni, qolgan matn)."""
+    recipient, body = "", []
     for page in pages[:max_pages]:
         main = page.main
-        if drop_recipient and page.number == 1:
+        if page.number == 1:
             bottom = header_bottom(page)
-            kept = [w for w in main.words if not in_recipient_block(w, bottom)]
-            main = PageText(main.number, main.source, kept)
-        parts.append(main.text)
-    return "\n".join(parts)
+            block = [w for w in main.words if in_recipient_block(w, bottom)]
+            rest = [w for w in main.words if not in_recipient_block(w, bottom)]
+            recipient = PageText(1, main.source, block).text
+            main = PageText(1, main.source, rest)
+        body.append(main.text)
+    return recipient, "\n".join(body)
 
 
 def is_ministry_address(low: str, hit: Hit) -> bool:
@@ -55,12 +63,36 @@ def is_ministry_address(low: str, hit: Hit) -> bool:
     return bool(MINISTRY.search(before) or MINISTRY_STREET.search(around))
 
 
-def letter_regions(text: str, drop_ministry: bool = True) -> list[Hit]:
+def text_regions(text: str, drop_ministry: bool = True) -> list[Hit]:
+    """Oddiy matndagi hudud eslatmalari (vazirlik manzilisiz)."""
     low = prepare(text)
     hits = find_regions(low)
     if drop_ministry:
         hits = [h for h in hits if not is_ministry_address(low, h)]
     return hits
+
+
+def letter_regions(
+    pages: list[CachedPage],
+    max_pages: int | None = None,
+    recipient_mode: str = "drop",
+    drop_ministry: bool = True,
+) -> list[Hit]:
+    """Xatdagi hudud eslatmalari: avval o'ng blokdagilari, keyin qolgan matndagilari."""
+    recipient, body = recipient_and_body(pages, max_pages)
+    if recipient_mode == "drop":
+        recipient_hits = []
+    else:
+        recipient_hits = text_regions(recipient, drop_ministry=False)
+        if recipient_mode == "tashkent":
+            recipient_hits = [h for h in recipient_hits if h.key != "toshkent_sh"]
+    # Qolgan matn topilmalari o'ng blokdan keyin keladi deb joylashadi (teng ballda tartib uchun)
+    offset = len(prepare(recipient)) + 1
+    body_hits = [
+        replace(h, start=h.start + offset, end=h.end + offset)
+        for h in text_regions(body, drop_ministry)
+    ]
+    return recipient_hits + body_hits
 
 
 def choose_region(hits: list[Hit]) -> str | None:
