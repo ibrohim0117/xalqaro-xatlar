@@ -32,6 +32,16 @@ def city(stem: str) -> tuple[str, int]:
     return rf"\bг(?:ор)?\.?\s*{stem}", PLACE
 
 
+def uz_city(latin: str, cyrillic: str) -> list[tuple[str, int]]:
+    """O'zbekcha "Navoiy shahri", "Навоий шаҳар" — yolg'iz nomi ismga o'xshash shaharlar."""
+    return [(rf"\b{latin}\s+shaha?r", PLACE), (rf"\b{cyrillic}\s+ша[ҳх]а?р", PLACE)]
+
+
+def district(stem: str) -> tuple[str, int]:
+    """Tuman: "Ферганский район", "Самаркандского р-на" (o'zak + район)."""
+    return rf"\b{stem}{DISTRICT}", PLACE
+
+
 def places(*stems: str) -> list[tuple[str, int]]:
     """Shahar va tumanlar: so'z boshidan qidiriladi (kelishiklar uchun oxiri ochiq)."""
     return [(rf"\b{stem}", PLACE) for stem in stems]
@@ -53,8 +63,8 @@ REGIONS = [
         (
             (r"\bг(?:ор)?\.?\s*ташкент\b", STRONG),  # "г. Ташкент", "гор.Ташкент"
             (r"\bгород\w*\s+ташкент", STRONG),
-            (r"\btoshkent\s+shahr", STRONG),
-            (r"\bтошкент\s+шаҳр", STRONG),
+            (r"\btoshkent\s+shaha?r", STRONG),  # "shahar" va "shahri"
+            (r"\bтошкент\s+ша[ҳх]а?р", STRONG),
             *places(
                 "бектемир",
                 "мирабад",
@@ -72,6 +82,27 @@ REGIONS = [
                 "собир-?\\s?рахимов",
                 "акмал-?\\s?икрамов",
                 "хамзинск",
+                "yunusobod",
+                "юнусобод",
+                "chilonzor",
+                "чилонзор",
+                "mirzo-?\\s?ulug'bek",
+                "мирзо-?\\s?улуғбек",
+                "yakkasaroy",
+                "яккасарой",
+                "shayxontohur",
+                "шайхонтоҳур",
+                "olmazor",
+                "олмазор",
+                "uchtepa",
+                "yashnobod",
+                "яшнобод",
+                "mirobod",
+                "миробод",
+                "sergeli",
+                "bektemir",
+                "yangihayot",
+                "янгиҳает",
             ),
             (r"\bташкент(?:а|е|у|ом)?\b", WEAK),  # yolg'iz "Ташкент" — kuchsiz
         ),
@@ -84,6 +115,11 @@ REGIONS = [
             oblast("ташкентск"),
             (rf"\bташкентск{DISTRICT}", STRONG),  # "Ташкентский район" — viloyatda
             *viloyat("toshkent", "тошкент"),
+            (r"\btoshkent\s+tuman", STRONG),  # Toshkent tumani — viloyatda
+            (r"\bтошкент\s+туман", STRONG),
+            *places("chirchiq", "чирчиқ", "olmaliq", "олмалиқ", "yangiyo'l", "янгийўл"),
+            *places("bekobod", "бекобод", "zangiota", "зангиота", "qibray", "қибрай"),
+            *places("bo'stonliq", "бўстонлиқ", "ohangaron", "оҳангарон", "chinoz", "чиноз"),
             *places(
                 "чирчик",
                 "алмалык",
@@ -118,9 +154,11 @@ REGIONS = [
         (
             oblast("андижанск"),
             *viloyat("andijon", "андижон"),
+            *places("andijon", "андижон"),
             *places(
                 "андижан",
                 "асака",
+                "асакинск",
                 "ханабад",
                 "шахрихан",
                 "ходжаабад",
@@ -146,7 +184,9 @@ REGIONS = [
         (
             oblast("бухарск"),
             *viloyat("buxoro", "бухоро"),
+            *places("buxoro", "бухоро"),
             (r"\bбухар[аеуы]\b", PLACE),
+            district("бухарск"),
             *places(
                 "каганск",
                 "гиждуван",
@@ -157,6 +197,7 @@ REGIONS = [
                 "каракульск",
                 "жондор",
                 "пешку",
+                "алатск",
             ),
             city("каган"),
         ),
@@ -168,7 +209,9 @@ REGIONS = [
         (
             oblast("ферганск"),
             *viloyat("farg'ona", "фарғона"),
+            *places("farg'ona", "фарғона", "qo'qon", "қўқон", "marg'ilon", "марғилон"),
             (r"\bферган[аеуы]\b", PLACE),  # shahar; "Ферганская долина" bu yerga tushmaydi
+            district("ферганск"),
             *places(
                 "коканд",
                 "маргилан",
@@ -187,6 +230,7 @@ REGIONS = [
                 "учкуприк",
                 "бувайд",
                 "куштепин",
+                "сохск",
             ),
             (rf"\bузбекистанск{DISTRICT}", PLACE),  # Farg'onadagi O'zbekiston tumani
             (rf"\bбагдадск{DISTRICT}", PLACE),
@@ -199,7 +243,9 @@ REGIONS = [
         (
             oblast("джизакск"),
             *viloyat("jizzax", "жиззах"),
+            *places("jizzax", "жиззах"),
             (r"\bджизак[аеу]?\b", PLACE),
+            district("джизакск"),
             *places(
                 "зарбдар",
                 "галляарал",
@@ -221,9 +267,11 @@ REGIONS = [
         (
             oblast("хорезмск"),
             *viloyat("xorazm", "хоразм"),
+            *places("urganch", "урганч", "xiva"),
             (r"(?<!куня-)(?<!кене)\bургенч", PLACE),  # Turkmanistondagi Ko'hna Urganch emas
             *places(
                 "хива",
+                "хивинск",
                 "ханкинск",
                 "хазарасп",
                 "гурлен",
@@ -234,6 +282,7 @@ REGIONS = [
                 "багатск",
                 "питнак",
                 "тупроккал",
+                "янгибазарск",
             ),
         ),
     ),
@@ -244,7 +293,9 @@ REGIONS = [
         (
             oblast("наманганск"),
             *viloyat("namangan", "наманган"),
+            *places("namangan"),
             (r"\bнаманган[аеу]?\b", PLACE),
+            district("наманганск"),
             *places(
                 "чуст",
                 "касансай",
@@ -266,11 +317,14 @@ REGIONS = [
         (
             oblast("навоийск"),
             *viloyat("navoiy", "навоий"),
+            *uz_city("navoiy", "навоий"),
             (r"\bг(?:ор)?\.?\s*навои\b", PLACE),  # yolg'iz "Навои" — shoir nomi, ko'chalar
             *places(
                 "учкудук",
                 "кармана",
+                "карманинск",
                 "нурата",
+                "нуратинск",
                 "кызылтеп",
                 "хатырчи",
                 "навбахор",
@@ -287,7 +341,10 @@ REGIONS = [
         (
             oblast("кашкадарьинск"),
             *viloyat("qashqadaryo", "қашқадарё"),
+            *uz_city("qarshi", "қарши"),
+            *places("shahrisabz", "шаҳрисабз"),
             (r"\bкарши\b", PLACE),
+            *places("каршинск", "касбийск", "нишанск"),
             *places(
                 "шахрисабз",
                 "китаб",
@@ -309,7 +366,9 @@ REGIONS = [
         (
             oblast("самаркандск"),
             *viloyat("samarqand", "самарқанд"),
+            *places("samarqand", "самарқанд"),
             (r"\bсамарканд[аеу]?\b", PLACE),
+            district("самаркандск"),
             *places(
                 "каттакурган",
                 "ургут",
@@ -333,7 +392,9 @@ REGIONS = [
         (
             oblast("сырдарьинск"),
             *viloyat("sirdaryo", "сирдарё"),
+            *uz_city("guliston", "гулистон"),
             (r"\bг(?:ор)?\.?\s*гулистан|\bгулистанск", PLACE),
+            district("сырдарьинск"),
             *places(
                 "янгиер",
                 "баяут",
@@ -353,6 +414,7 @@ REGIONS = [
         (
             oblast("сурхандарьинск"),
             *viloyat("surxondaryo", "сурхондарё"),
+            *places("termiz", "термиз"),
             *places(
                 "термез",
                 "денау",
@@ -367,6 +429,8 @@ REGIONS = [
                 "сариасий",
                 "кизирик",
                 "бандихан",
+                "бандихон",
+                "узунск",
             ),
         ),
     ),
@@ -378,6 +442,7 @@ REGIONS = [
             (r"\bкаракалпак", STRONG),  # Каракалпакстан, Каракалпакская АССР
             (r"\bqoraqalpog", STRONG),
             (r"\bқорақалпоғ", STRONG),
+            *places("nukus"),
             *places(
                 "нукус",
                 "ходжейли",
@@ -395,6 +460,7 @@ REGIONS = [
                 "канлыкул",
                 "тахтакупыр",
                 "караузяк",
+                "бозатау",
             ),
             city("беруни"),
         ),

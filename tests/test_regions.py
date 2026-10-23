@@ -16,7 +16,10 @@ def keys(text: str) -> list[tuple[str, int]]:
         ("уроженец Ферганской области Узбекской ССР", [("fargona", STRONG)]),
         ("Республика Каракалпакстан, г. Нукус", [("qoraqalpog", STRONG), ("qoraqalpog", PLACE)]),
         ("Хорезмская область, г. Ургенч", [("xorazm", STRONG), ("xorazm", PLACE)]),
-        ("Farg‘ona viloyati, Qo'qon shahri", [("fargona", STRONG)]),  # o'zbekcha, ‘ apostrof
+        (
+            "Farg‘ona viloyati, Qo'qon shahri",
+            [("fargona", STRONG), ("fargona", PLACE)],
+        ),  # o'zbekcha, ‘ apostrof
         ("Самаркандская обл., Ургутский район", [("samarqand", STRONG), ("samarqand", PLACE)]),
     ],
 )
@@ -57,3 +60,41 @@ def test_region_of_boshqarma_reads_json_names():
     assert region_of_boshqarma("Toshkent viloyati adliya boshqarmasi") == "toshkent_v"
     assert region_of_boshqarma("Notariat, advokatura va mediatsiya boshqarmasi") is None
     assert region_of_boshqarma(None) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "key"),
+    [
+        ("Асакинский р-н", "andijon"),  # Асака -> Асакинский: o'zak o'zgaradi
+        ("Хивинский район", "xorazm"),
+        ("Нуратинского района", "navoiy"),
+        ("Каршинский район", "qashqadaryo"),
+        ("Ферганский район", "fargona"),  # viloyat markazi nomidagi tuman
+        ("Самаркандский р-н", "samarqand"),
+        ("Бухарского района", "buxoro"),
+        ("Сырдарьинский район", "sirdaryo"),
+    ],
+)
+def test_district_adjectives(text, key):
+    assert keys(text) == [(key, PLACE)]
+
+
+@pytest.mark.parametrize(
+    ("text", "key"),
+    [
+        ("Toshkent shahar Yunusobod tumani FHDYO bo'limi", "toshkent_sh"),  # "shahar" shakli
+        ("Тошкент шаҳар Юнусобод тумани ФҲДЁ бўлими", "toshkent_sh"),
+        ("Toshkent shahri Mirzo Ulug‘bek tumani", "toshkent_sh"),  # ‘ apostrof
+        ("Toshkent tumani FHDYO", "toshkent_v"),  # tuman — viloyatda
+        ("Qo'qon shahri", "fargona"),
+        ("Navoiy shahri", "navoiy"),
+        ("Termiz shahri", "surxondaryo"),
+    ],
+)
+def test_uzbek_forms(text, key):
+    assert {k for k, _ in keys(text)} == {key}
+
+
+@pytest.mark.parametrize("text", ["Alisher Navoiy ko'chasi", "qarshi chiqdi", "Guliston ismli"])
+def test_uzbek_lookalikes_are_ignored(text):
+    assert keys(text) == []
