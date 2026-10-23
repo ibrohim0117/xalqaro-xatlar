@@ -1,4 +1,4 @@
-"""B4.4, B5.1: bitta xat uchun AI javobi — boshqarma, jo'natuvchi tashkilot, qisqacha mazmun.
+"""B4.4, B5.1, B5.2: bitta xat uchun AI javobi — boshqarma, jo'natuvchi, imzo, qisqacha mazmun.
 
 "Model" — dev xatlardan o'rganilgan qiymatlar: har hudud (va notariat) uchun boshqarmaning to'liq
 nomi, eng ko'p uchraydigan qisqacha mazmun va jo'natuvchini topish uchun dev xatlari 1-sahifasining
@@ -18,6 +18,7 @@ from src.dataset import expected_boshqarma, group_of
 from src.evaluate import REKVIZIT_FIELDS, normalize
 from src.regions import REGIONS, region_of_boshqarma
 from src.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text, prune
+from src.signer import SIGNER_MIN_Y, SIGNER_PAGES, candidates, choose_signer
 from src.text_cache import CachedPage
 
 MODEL_FILE = Path("outputs/model.json")
@@ -100,6 +101,11 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
             rekvizit["hujjat_junatuvchi_tashkilot"] = sender
         else:  # notanish jo'natuvchi — taxmin yozilmaydi
             flags.append("hujjat_junatuvchi_tashkilot")
+    signer = choose_signer(candidates(pages, SIGNER_PAGES), min_y=SIGNER_MIN_Y)
+    if signer:
+        rekvizit["imzolagan_shaxs"] = signer.latin()
+    else:  # imzo matnda o'qilmagan (qo'lda, shtamp) yoki shakli boshqacha
+        flags.append("imzolagan_shaxs")
     return {
         "rekvizit_document": rekvizit,
         "tasks": [{"asosiy_ijrochilar_boshqarmalari": [name] if name else []}],

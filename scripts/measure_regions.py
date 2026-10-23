@@ -20,6 +20,10 @@ VARIANTS = {
     "A. hamma matn, chetlashsiz": dict(recipient_mode="keep", drop_ministry=False),
     "C. o'ng blok butunlay chetda": dict(recipient_mode="drop"),
     "E. o'ng blokdan faqat Toshkent": dict(recipient_mode="tashkent"),
+    # Rahbar: asosiy ma'lumot 1–2-sahifada, aniqlik uchun 1–4 olsa ham bo'ladi, qolgani ilova
+    "D. C, faqat 1–2-sahifa": dict(recipient_mode="drop", max_pages=2),
+    "F. C, faqat 1–4-sahifa": dict(recipient_mode="drop", max_pages=4),
+    "G. C, faqat 1–6-sahifa (tanlangan)": dict(recipient_mode="drop", max_pages=6),
 }
 MAIN_VARIANT = "C. o'ng blok butunlay chetda"
 ERRORS_FILE = Path("outputs/b4_hudud_xatolar.csv")
@@ -61,10 +65,10 @@ def main() -> None:
     n = sum(outcomes[MAIN_VARIANT][k] for k in ("to'g'ri", "topilmadi", "noto'g'ri"))
     print(f"B4.2: hududni topish, dev viloyat xatlari ({n} ta)\n")
     header = ["to'g'ri", "topilmadi", "noto'g'ri", "ro'yxatda bor"]
-    print(f"  {'':<32}" + "".join(f"{h:>15}" for h in header))
+    print(f"  {'':<38}" + "".join(f"{h:>15}" for h in header))
     for name, counts in outcomes.items():
         cells = "".join(f"{counts[h]:>4} ({counts[h] / n:4.0%})".rjust(15) for h in header)
-        print(f"  {name:<32}{cells}")
+        print(f"  {name:<38}{cells}")
 
     print(f"\n  {MAIN_VARIANT} — hudud bo'yicha (to'g'ri / jami):")
     for region in sorted({r for r, _ in per_region}, key=str):

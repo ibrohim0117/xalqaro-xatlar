@@ -25,6 +25,9 @@ MINISTRY_STREET = re.compile(r"са[йи]{1,2}лго[хx]|темура,?\s*16")
 # O'ng blok bilan nima qilinadi: "keep" — hisobga olinadi, "drop" — butunlay chiqariladi
 # (asosiy qoida), "tashkent" — faqat Toshkent shahri chiqariladi (sinalgan, yaxshilamadi)
 RECIPIENT_MODES = ("keep", "drop", "tashkent")
+# Rahbar: "asosiy ma'lumot 1–2-sahifada, aniqlik uchun 1–4 olsa ham bo'ladi, qolgani ilova".
+# Dev (hudud, 57 xat): 1–2-sahifa 35, 1–4-sahifa 47, hamma sahifa 48 to'g'ri. Tanlandi 1–6 (zaxira).
+REGION_PAGES = 6
 
 
 def header_bottom(first: CachedPage) -> float:
@@ -140,5 +143,5 @@ def predict_group(
     xat evaziga 5 ta viloyat xatini noto'g'ri yuborardi."""
     if is_notary(pages, notary_mode):
         return "notariat", None
-    region = choose_region(letter_regions(pages))
+    region = choose_region(letter_regions(pages, max_pages=REGION_PAGES))
     return ("viloyat", region) if region else (None, None)

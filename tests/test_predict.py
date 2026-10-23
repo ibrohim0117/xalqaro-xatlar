@@ -44,7 +44,7 @@ def test_learn_model_from_dev_truths():
 
 def test_predict_uses_learned_names():
     answer = predict(pages_of("Ферганская область, Кокандский район"), MODEL)
-    assert boshqarma_of(answer) == [FARGONA] and answer["tekshirish_kerak"] == []
+    assert boshqarma_of(answer) == [FARGONA] and "boshqarma" not in answer["tekshirish_kerak"]
     answer = predict(pages_of("Нотариус, наследственное дело. Андижанская область"), MODEL)
     assert boshqarma_of(answer) == [NOTARIAT]  # notariat hududdan ustun
 
@@ -52,12 +52,12 @@ def test_predict_uses_learned_names():
 def test_unknown_region_gets_template_name_and_flag():
     answer = predict(pages_of("Бухарская область"), MODEL)
     assert boshqarma_of(answer) == ["Buxoro viloyati adliya boshqarmasi"]
-    assert answer["tekshirish_kerak"] == ["boshqarma"]
+    assert "boshqarma" in answer["tekshirish_kerak"]
 
 
 def test_nothing_found_means_empty_and_flag():
     answer = predict(pages_of("Просим оказать правовую помощь"), MODEL)
-    assert boshqarma_of(answer) == [] and answer["tekshirish_kerak"] == ["boshqarma"]
+    assert boshqarma_of(answer) == [] and "boshqarma" in answer["tekshirish_kerak"]
 
 
 def test_answer_is_readable_by_evaluate():
@@ -99,3 +99,23 @@ def test_unknown_sender_is_flagged_not_guessed():
     answer = predict(pages_of("Министерство юстиции Республики Молдова просит"), SENDER_MODEL)
     assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] is None
     assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]
+
+
+def test_predict_signer_from_letter_end():
+    words = [
+        Word("Ферганская", 0.1, 0.3, 0.2, 0.31, 0),
+        Word("область", 0.21, 0.3, 0.3, 0.31, 0),
+        Word("Начальник", 0.1, 0.8, 0.2, 0.81, 1),
+        Word("А.Б.", 0.7, 0.8, 0.74, 0.81, 1),
+        Word("Сидоров", 0.75, 0.8, 0.85, 0.81, 1),
+    ]
+    pages = [CachedPage(1, PageText(1, "text_layer", words), None)]
+    answer = predict(pages, MODEL)
+    assert answer["rekvizit_document"]["imzolagan_shaxs"] == "A.B.Sidorov"
+    assert "imzolagan_shaxs" not in answer["tekshirish_kerak"]
+
+
+def test_missing_signer_is_flagged():
+    answer = predict(pages_of("Ферганская область"), MODEL)
+    assert answer["rekvizit_document"]["imzolagan_shaxs"] is None
+    assert "imzolagan_shaxs" in answer["tekshirish_kerak"]
