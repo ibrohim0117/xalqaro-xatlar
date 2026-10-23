@@ -4,7 +4,7 @@ json'dagi shakl: bosh harflar va familiya, lotinda: "O.N.Xrushev", "M.Burkadze",
 """
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.common.text import to_latin
 from src.reading.pages import CachedPage
@@ -49,6 +49,8 @@ class Candidate:
     y0: float
     initials: tuple[str, ...]  # kirill: ("А", "Б")
     surname: str  # kirill: "Сидоров"
+    # bosh harflar + familiya egallagan joy (x0, y0, x1, y1) — xodimga ko'rsatish uchun
+    box: tuple[float, float, float, float] = field(default=(0.0, 0.0, 0.0, 0.0), compare=False)
 
     def latin(self) -> str:
         """json shakli: "A.B.Sidorov". Katta harfli "СИДОРОВ" ham shu ko'rinishga keladi."""
@@ -65,14 +67,24 @@ def candidates(pages: list[CachedPage], max_pages: int | None = 2) -> list[Candi
             surname = EDGE.sub("", word.text)
             if not SURNAME_TOKEN.fullmatch(surname):
                 continue
-            initials = initials_before(words, i)
+            initials, start = initials_before(words, i)
             if initials:
-                found.append(Candidate(page.number, word.x0, word.y0, tuple(initials), surname))
+                used = words[start : i + 1]
+                box = (
+                    min(w.x0 for w in used),
+                    min(w.y0 for w in used),
+                    max(w.x1 for w in used),
+                    max(w.y1 for w in used),
+                )
+                found.append(
+                    Candidate(page.number, word.x0, word.y0, tuple(initials), surname, box)
+                )
     return found
 
 
-def initials_before(words: list[Word], i: int) -> list[str]:
-    """Familiyadan oldin, AYNAN SHU QATORDA turgan bosh harflar: "А.Б." yoki "А." "Б." (1–2 ta).
+def initials_before(words: list[Word], i: int) -> tuple[list[str], int]:
+    """Familiyadan oldin, AYNAN SHU QATORDA turgan bosh harflar: "А.Б." yoki "А." "Б." (1–2 ta)
+    va birinchi bosh harf so'zining o'rni.
     Qator sharti kerak: aks holda "Иванову П.С." dan keyingi qatordagi "Начальник" ham
     imzo bo'lib qoladi."""
     initials: list[str] = []
@@ -83,7 +95,7 @@ def initials_before(words: list[Word], i: int) -> list[str]:
             break
         initials = re.findall(r"[А-ЯЁЎҚҒҲ]", prev.text) + initials
         j -= 1
-    return initials[-2:]
+    return initials[-2:], j + 1
 
 
 def choose_signer(
@@ -94,3 +106,9 @@ def choose_signer(
     bo'lib qolmasligi uchun."""
     pool = [c for c in found if (c.x0 >= RIGHT_HALF or not right_only) and c.y0 >= min_y]
     return max(pool, key=lambda c: (c.page, c.y0), default=None)
+
+
+def find_signer(pages: list[CachedPage]) -> Candidate | None:
+    """Imzo: 1-sahifa, o'ng yarmi, pastki yarmi (B5.2b qoidasi). predict ham, joyni ko'rsatish ham
+    shu bitta funksiyani ishlatadi — qoida bir joyda."""
+    return choose_signer(candidates(pages, SIGNER_PAGES), min_y=SIGNER_MIN_Y)

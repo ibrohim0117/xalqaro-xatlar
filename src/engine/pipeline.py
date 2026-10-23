@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.engine.feedback import FEEDBACK_FILE, load_confirmed, with_confirmed
+from src.engine.locate import locate
 from src.engine.model import MODEL_FILE, Model, load_model
 from src.engine.predict import predict
 from src.fields.sender import SENDER_MODE, header_text
@@ -27,6 +28,7 @@ class Result:
     pages: int  # nechta sahifa o'qildi
     seconds: float  # umumiy vaqt
     ocr: OcrStats  # shundan OCR'ga ketgani
+    boxes: dict[str, list[dict]]  # maydon -> qayerdan olingani (sahifa va to'rtburchak)
 
 
 def current_model(model_file: Path = MODEL_FILE, feedback_file: Path = FEEDBACK_FILE) -> Model:
@@ -42,4 +44,5 @@ def process_pdf(pdf: Path | bytes, model: Model) -> Result:
         raise ValueError("PDF'da sahifa yo'q")
     answer = predict(pages, model)
     blank = header_text(pages, SENDER_MODE)
-    return Result(answer, blank, len(pages), time.perf_counter() - start, stats)
+    boxes = locate(pages)
+    return Result(answer, blank, len(pages), time.perf_counter() - start, stats, boxes)

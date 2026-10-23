@@ -1,6 +1,7 @@
-"""B7.2: API — PDF yuklanadi, AI javobi qaytadi; xodim jo'natuvchi nomini tasdiqlaydi.
+"""B7.2–B7.3: API va sahifa — PDF yuklanadi, AI javobi qaytadi; xodim jo'natuvchini tasdiqlaydi.
 
-POST /extract  — PDF (+ ixtiyoriy to'g'ri javob json'i — test rejimi) -> AI javobi, vaqt, blank_id
+POST /extract  — PDF (+ ixtiyoriy to'g'ri javob json'i — test rejimi) -> AI javobi, vaqt, blank_id,
+                 joylar (har maydon qayerdan olingani); ?rasmlar=true — sahifalar rasmi ham
 POST /confirm  — {blank_id, nom}: xodim tasdiqlagan jo'natuvchi xotiraga yoziladi
 
 MAXFIYLIK: server faqat 127.0.0.1 da ishlaydi (uvicorn standarti). PDF diskka yozilmaydi —
@@ -24,6 +25,7 @@ from src.engine.feedback import FEEDBACK_FILE, confirm_sender
 from src.engine.model import MODEL_FILE, Model
 from src.engine.pipeline import current_model, process_pdf
 from src.evaluation.evaluate import compare
+from src.reading.images import page_images
 
 MAX_BLANKS = 1000  # RAM'da turadigan oxirgi blanklar (eskisi o'chadi)
 
@@ -63,10 +65,12 @@ def create_app(model_file: Path = MODEL_FILE, feedback_file: Path = FEEDBACK_FIL
     def extract(
         pdf: Annotated[UploadFile, File()],
         truth: Annotated[UploadFile | None, File()] = None,
+        rasmlar: bool = False,
     ) -> dict:
         expected = read_truth(truth) if truth is not None else None  # OCR'dan oldin tekshiriladi
+        data = pdf.file.read()
         try:
-            result = process_pdf(pdf.file.read(), model())
+            result = process_pdf(data, model())
         except (pymupdf.FileDataError, ValueError) as e:
             raise HTTPException(400, f"PDF o'qilmadi: {e}") from e
         blank_id = uuid.uuid4().hex
@@ -83,7 +87,10 @@ def create_app(model_file: Path = MODEL_FILE, feedback_file: Path = FEEDBACK_FIL
                 "sahifalar": result.pages,
             },
             "blank_id": blank_id,
+            "joylar": result.boxes,
         }
+        if rasmlar:  # sahifa uchun: PDF ustida ramkalar chiziladi
+            answer["rasmlar"] = page_images(data, result.pages)
         if expected is not None:
             answer["solishtirish"] = compare(result.answer, expected)
         return answer

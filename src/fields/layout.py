@@ -21,3 +21,9 @@ def header_bottom(first: CachedPage) -> float:
 
 def in_recipient_block(word: Word, bottom: float) -> bool:
     return word.x0 >= RIGHT_BLOCK_X and word.y0 < bottom
+
+
+def sender_block(first: CachedPage) -> list[Word]:
+    """Chap yuqori blok (jo'natuvchi blanki): o'ng blokdan tashqari, "№" qatoridan yuqorida."""
+    top = header_bottom(first) - ANCHOR_MARGIN  # "№" qatorining o'zi (topilmasa — zaxira chegara)
+    return [w for w in first.main.words if w.y0 < top and w.x0 < RIGHT_BLOCK_X]

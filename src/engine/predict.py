@@ -10,7 +10,7 @@ from src.fields.boshqarma import predict_group
 from src.fields.date_number import date_number_answer
 from src.fields.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text
 from src.fields.sender_variants import page_variants
-from src.fields.signer import SIGNER_MIN_Y, SIGNER_PAGES, candidates, choose_signer
+from src.fields.signer import find_signer
 from src.reading.pages import CachedPage
 
 
@@ -43,7 +43,7 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         flags.append("hujjat_junatuvchi_tashkilot")
         if variants := page_variants(pages):
             suggestions["hujjat_junatuvchi_tashkilot"] = variants
-    signer = choose_signer(candidates(pages, SIGNER_PAGES), min_y=SIGNER_MIN_Y)
+    signer = find_signer(pages)
     if signer:
         rekvizit["imzolagan_shaxs"] = signer.latin()
     else:  # imzo matnda o'qilmagan (qo'lda, shtamp) yoki shakli boshqacha

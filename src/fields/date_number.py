@@ -120,6 +120,16 @@ def find_date(words: list[Word], anchor: int) -> str | None:
     return None
 
 
+def anchor_of(first: CachedPage) -> tuple[Word, list[Word]] | None:
+    """ "№" langari va u turgan qator so'zlari (avval matn qatlami, bo'lmasa OCR) — joyni ko'rsatish
+    uchun: sana va raqam o'qilmagan bo'lsa ham, qo'lda yozilgani aynan shu qatorda bo'ladi."""
+    for page in (first.text_layer, first.ocr):
+        if page is not None and (i := find_anchor(page.words)) is not None:
+            a = page.words[i]
+            return a, [w for w in page.words if abs(w.y0 - a.y0) <= SAME_LINE]
+    return None
+
+
 def date_and_number(page: PageText) -> tuple[str | None, str | None]:
     """1-sahifadan (sana, raqam). Langar topilmasa — (None, None)."""
     anchor = find_anchor(page.words)

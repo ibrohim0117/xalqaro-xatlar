@@ -15,7 +15,7 @@ from dataclasses import replace
 from src.fields.layout import header_bottom, in_recipient_block
 from src.fields.regions import Hit, find_regions, prepare
 from src.reading.pages import CachedPage
-from src.reading.pdf_text import PageText
+from src.reading.pdf_text import PageText, Word
 
 MINISTRY = re.compile(r"юстиции\s+республики\s+узбекистан")
 # Vazirlik (Sayilgoh, 5) va Davlat xizmatlari agentligi (Amir Temur, 16A) manzillari
@@ -131,3 +131,41 @@ def predict_group(
         return "notariat", None
     region = choose_region(letter_regions(pages, max_pages=REGION_PAGES))
     return ("viloyat", region) if region else (None, None)
+
+
+EVIDENCE_LINES = 3  # xodimga ko'rsatiladigan dalil qatorlari (eng birinchilari)
+
+
+def evidence_lines(
+    pages: list[CachedPage], group: str | None, region: str | None
+) -> list[tuple[int, list[Word]]]:
+    """Boshqarma qaysi qatorlarga qarab tanlangani: notariat — "нотари…" (1–2-sahifa), viloyat —
+    tanlangan hudud eslatilgan qatorlar (1–6-sahifa). Qabul qiluvchi bloki chetlanadi: qaror ham
+    unga qaramaydi. Hudud ikki qatorga bo'linib ketgan bo'lsa, qator topilmasligi mumkin."""
+    if group == "notariat":
+        max_pages = NOTARY_PAGES
+
+        def matches(text: str) -> bool:
+            return bool(NOTARY.search(prepare(text)))
+    elif group == "viloyat":
+        max_pages = REGION_PAGES
+
+        def matches(text: str) -> bool:
+            return any(h.key == region for h in text_regions(text))
+    else:
+        return []
+    found = []
+    for page in pages[:max_pages]:
+        words = page.main.words
+        if page.number == 1:
+            bottom = header_bottom(page)
+            words = [w for w in words if not in_recipient_block(w, bottom)]
+        lines: dict[int, list[Word]] = {}
+        for word in words:
+            lines.setdefault(word.line, []).append(word)
+        for line in lines.values():
+            if matches(" ".join(w.text for w in line)):
+                found.append((page.number, line))
+                if len(found) == EVIDENCE_LINES:
+                    return found
+    return found

@@ -40,6 +40,16 @@ def test_extract_returns_answer_time_and_blank_id(client, letter_pdf):
     assert body["vaqt"]["sahifalar"] == 2
     assert 0 < body["vaqt"]["ocr"] <= body["vaqt"]["jami"]
     assert body["blank_id"] and "solishtirish" not in body
+    assert body["joylar"]["imzolagan_shaxs"][0]["sahifa"] == 1
+    assert "rasmlar" not in body  # rasmlar faqat so'ralganda (javob yengil qolsin)
+
+
+@needs_tesseract
+def test_extract_with_page_images(client, letter_pdf):
+    files = {"pdf": ("xat.pdf", letter_pdf.read_bytes(), "application/pdf")}
+    body = client.post("/extract?rasmlar=true", files=files).json()
+    assert len(body["rasmlar"]) == body["vaqt"]["sahifalar"] == 2
+    assert body["rasmlar"][0].startswith("data:image/jpeg;base64,")
 
 
 @needs_tesseract
