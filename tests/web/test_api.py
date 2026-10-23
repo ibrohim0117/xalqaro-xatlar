@@ -1,12 +1,14 @@
 """src/web/api.py testlari — soxta xat, vaqtinchalik model va xotira fayllari bilan."""
 
 import json
+from datetime import date
 
 import pytest
 from fastapi.testclient import TestClient
 
+from src.engine.date_ocr import DateReading
 from src.engine.model import Model, save_model
-from src.web.api import create_app
+from src.web.api import create_app, received_date
 from tests.conftest import FAKE_LETTER, make_letter_pdf, needs_tesseract
 
 FARGONA = "Farg'ona viloyati adliya boshqarmasi"
@@ -17,10 +19,16 @@ TRUTH = {
 }
 
 
+def no_ocr():
+    return None  # sana OCR'i o'chiq — testlar modelsiz va tez
+
+
 @pytest.fixture
 def client(tmp_path):
     save_model(Model(names={"fargona": FARGONA}, summary="Mazmun"), tmp_path / "model.json")
-    return TestClient(create_app(tmp_path / "model.json", tmp_path / "feedback.jsonl"))
+    return TestClient(
+        create_app(tmp_path / "model.json", tmp_path / "feedback.jsonl", date_ocr_factory=no_ocr)
+    )
 
 
 def upload(client, pdf: bytes, truth: bytes | None = None):
@@ -68,7 +76,8 @@ def test_bad_inputs_are_rejected_before_ocr(client):
 
 
 def test_missing_model(tmp_path):
-    client = TestClient(create_app(tmp_path / "yoq.json", tmp_path / "feedback.jsonl"))
+    app = create_app(tmp_path / "yoq.json", tmp_path / "feedback.jsonl", date_ocr_factory=no_ocr)
+    client = TestClient(app)
     assert upload(client, b"%PDF").status_code == 503
 
 
@@ -96,3 +105,36 @@ def test_page_and_static_files_are_served(client):
         assert client.get(f"/static/{name}").status_code == 200
     # sahifa internetdan hech narsa yuklamaydi
     assert "http://" not in page.text and "https://" not in page.text
+
+
+class FakeDateOcr:
+    """Sana dvigateli o'rnida: kelgan sanani eslab qoladi, tayyor natija qaytaradi."""
+
+    def __init__(self):
+        self.received = None
+
+    def read(self, page, first, received):
+        self.received = received
+        return DateReading(None, "12.03.2026", ["12.03.2026", "13.03.2026"], 1.5, ["vlm", "rapid"])
+
+
+@needs_tesseract
+def test_prefilled_date_with_suggestions(tmp_path):
+    save_model(Model(names={"fargona": FARGONA}, summary="Mazmun"), tmp_path / "model.json")
+    fake = FakeDateOcr()
+    app = create_app(tmp_path / "model.json", tmp_path / "f.jsonl", date_ocr_factory=lambda: fake)
+    pdf = make_letter_pdf(tmp_path / "xat.pdf").read_bytes()
+    truth = json.dumps({"rekvizit_document": {"kirish_sana": "05.01.2026"}}).encode()
+    body = upload(TestClient(app), pdf, truth).json()
+    assert body["rekvizit_document"]["hujjat_sana"] == "12.03.2026"
+    assert "hujjat_sana" in body["tekshirish_kerak"]  # yozildi, lekin "tekshiring"
+    assert body["takliflar"]["hujjat_sana"] == ["12.03.2026", "13.03.2026"]
+    assert body["vaqt"]["sana_ocr"] == 1.5 and body["vaqt"]["sana_ocrlar"] == ["vlm", "rapid"]
+    assert fake.received == date(2026, 1, 5)  # kelgan sana json'dan (test rejimi)
+
+
+def test_received_date_sources():
+    truth = {"rekvizit_document": {"kirish_sana": "05.01.2026"}}
+    assert received_date("09.01.2026", truth) == date(2026, 1, 9)  # so'rovdagisi ustun
+    assert received_date(None, truth) == date(2026, 1, 5)
+    assert received_date(None, None) == date.today()

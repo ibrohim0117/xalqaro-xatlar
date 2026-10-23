@@ -5,7 +5,7 @@ from datetime import date
 import pymupdf
 import pytest
 
-from src.engine.date_ocr import DateOcr
+from src.engine.date_ocr import DateOcr, DateReading, apply_reading, build_date_ocr
 from tests.conftest import FAKE_LETTER, make_letter_pdf
 from tests.engine.test_locate import pages_of
 
@@ -75,3 +75,34 @@ def test_broken_vlm_falls_back_to_vote(letter):
     reading = DateOcr(readers, confirm_first=True).read(*letter(NO_PRINTED_DATE), RECEIVED)
     assert reading.readers == ["rapid", "tesseract"]  # VLM chetlandi
     assert reading.prefill == "12.03.2026"  # ikki OCR kelishdi (oddiy ovoz)
+
+
+def answer_with(date_value=None, flags=("hujjat_sana", "hujjat_raqami")):
+    return {
+        "rekvizit_document": {"hujjat_sana": date_value},
+        "tekshirish_kerak": list(flags),
+        "takliflar": {"hujjat_sana": "01.01.2026"},
+    }
+
+
+def test_apply_prefill_keeps_the_flag():
+    answer = answer_with()
+    apply_reading(answer, DateReading(prefill="12.03.2026", suggestions=["12.03.2026"]))
+    assert answer["rekvizit_document"]["hujjat_sana"] == "12.03.2026"
+    assert "hujjat_sana" in answer["tekshirish_kerak"]
+    assert answer["takliflar"]["hujjat_sana"] == ["12.03.2026"]  # bitta taklif o'rniga ro'yxat
+
+
+def test_apply_auto_removes_the_flag_and_nothing_keeps_old_values():
+    answer = answer_with()
+    apply_reading(answer, DateReading(auto="12.03.2026"))
+    assert "hujjat_sana" not in answer["tekshirish_kerak"]
+    answer = answer_with()
+    apply_reading(answer, DateReading())  # OCR hech narsa topmadi
+    assert answer["rekvizit_document"]["hujjat_sana"] is None
+    assert answer["takliflar"]["hujjat_sana"] == "01.01.2026"  # predict taklifi qoladi
+
+
+def test_build_without_readers_is_off():
+    assert build_date_ocr("") is None
+    assert build_date_ocr("yoq-ocr") is None  # noma'lum nom — ogohlantirish bilan chetlanadi

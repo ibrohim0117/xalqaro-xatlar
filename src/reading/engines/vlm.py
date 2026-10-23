@@ -33,6 +33,15 @@ class VlmReader:
             raise ValueError(f"VLM faqat lokal manzilda bo'lishi kerak: {url}")
         self.url, self.prompt, self.timeout = url, prompt, timeout
 
+    def available(self) -> bool:
+        """Server javob beryaptimi (/health). Yoqilmagan bo'lsa — VLM chetlanadi."""
+        health = self.url.split("/v1/")[0] + "/health"
+        try:
+            with urllib.request.urlopen(health, timeout=2) as response:
+                return response.status == 200
+        except OSError:
+            return False
+
     def read(self, png: bytes) -> str:
         image = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
         scale = MAX_SIDE / max(image.shape[:2])

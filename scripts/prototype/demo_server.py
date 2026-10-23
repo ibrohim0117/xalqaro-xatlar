@@ -3,7 +3,9 @@
 Vaqtinchalik papkada soxta model (to'qilgan boshqarma nomi) va ikkita to'qilgan xat yasaladi:
 - soxta_xat.pdf — testlardagi xat (hamma maydon topiladi);
 - soxta_rossiya.pdf — sana yo'q, "№" dan keyin raqam yo'q (go'yo qo'lda yozilgan), hudud modelda
-  uchramagan — "tekshirish kerak" holatlarini ko'rsatadi.
+  uchramagan — "tekshirish kerak" holatlarini ko'rsatadi;
+- soxta_skaner.pdf — soxta_xat'ning skaneri (matn qatlami yo'q): sana faqat rasmda — sana
+  dvigateli (bo'laklar, OCR'lar, ovoz) to'liq ishlaydi.
 Tasdiqlangan nomlar ham vaqtinchalik papkaga yoziladi: haqiqiy xotira (outputs/) o'zgarmaydi.
 Rahbarga real xatsiz ko'rsatishga qulay.
 Server 8001-portda (asosiy 8000 bilan to'qnashmaydi).
@@ -19,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 
 from src.engine.model import Model, save_model
 from src.web.api import create_app
-from tests.conftest import make_letter_pdf
+from tests.conftest import make_letter_pdf, make_scanned_pdf
 
 PORT = 8001
 DEMO_MODEL = Model(
@@ -49,6 +51,7 @@ def main() -> None:
         save_model(DEMO_MODEL, folder / "model.json")
         make_letter_pdf(letters / "soxta_xat.pdf")
         make_letter_pdf(letters / "soxta_rossiya.pdf", RUSSIA)
+        make_scanned_pdf(letters / "soxta_skaner.pdf", letters / "soxta_xat.pdf")
 
         app = create_app(folder / "model.json", folder / "feedback.jsonl")
         app.mount("/demo", StaticFiles(directory=letters), name="demo")

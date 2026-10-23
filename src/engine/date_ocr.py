@@ -10,6 +10,7 @@ Biror OCR ishlamasa (masalan, VLM serveri o'chiq) — shu xat uchun chetlanadi, 
 """
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from datetime import date as Date
@@ -28,10 +29,12 @@ from src.fields.date_vote import (
     windowed,
 )
 from src.reading.crops import crop_png
-from src.reading.engines import LineReader
+from src.reading.engines import LineReader, make_reader
 from src.reading.pages import CachedPage
 
 CROPS = ("date", "line", "header")  # sana uchun kerakli bo'laklar
+# Qaysi OCR'lar (tartib muhim: 1-si VLM bo'lsa — "biri topadi, boshqasi tasdiqlaydi")
+DEFAULT_READERS = "vlm,rapidocr,rapidocr-eslav,tesseract-block"
 log = logging.getLogger(__name__)
 
 
@@ -73,3 +76,39 @@ class DateOcr:
             prefill = vote([{f["date"]} - {None} for f in found])
         suggestions = ranked([{d for d in f.values() if d} for f in found])
         return DateReading(None, prefill, suggestions, time.perf_counter() - start, worked)
+
+
+def build_date_ocr(names: str | None = None) -> DateOcr | None:
+    """SANA_OCR (vergul bilan) dagi OCR'lar; bo'sh — sana OCR'i o'chiq. Yuklanmagan yoki serveri
+    javob bermagan OCR (masalan, VLM) ogohlantirish bilan chetlanadi."""
+    names = os.environ.get("SANA_OCR", DEFAULT_READERS) if names is None else names
+    readers = []
+    for name in filter(None, (n.strip() for n in names.split(","))):
+        try:
+            reader = make_reader(name)
+        except Exception as error:  # model fayli yo'q va h.k.
+            log.warning("%s yuklanmadi: %s", name, error)
+            continue
+        if hasattr(reader, "available") and not reader.available():
+            log.warning("%s serveri javob bermadi — chetlandi", name)
+            continue
+        readers.append(reader)
+    if not readers:
+        return None
+    return DateOcr(readers, confirm_first=readers[0].name == "vlm")
+
+
+def apply_reading(answer: dict, reading: DateReading) -> None:
+    """Natijani javobga qo'shadi: auto — yoziladi; prefill — yoziladi, "tekshirish kerak" qoladi;
+    takliflar — ro'yxat (predict'ning bitta taklifi o'rniga)."""
+    rekvizit, flags = answer["rekvizit_document"], answer["tekshirish_kerak"]
+    if reading.auto:
+        rekvizit["hujjat_sana"] = reading.auto
+        if "hujjat_sana" in flags:
+            flags.remove("hujjat_sana")
+    elif reading.prefill:
+        rekvizit["hujjat_sana"] = reading.prefill
+        if "hujjat_sana" not in flags:
+            flags.append("hujjat_sana")
+    if reading.suggestions:
+        answer["takliflar"]["hujjat_sana"] = reading.suggestions

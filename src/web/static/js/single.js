@@ -62,6 +62,7 @@ function renderMeta() {
     el("strong", {}, answer.fayl || "xat.pdf"),
     ` · ${t.sahifalar} sahifa · ${t.jami} s (OCR ${t.ocr} s, ${t.ocr_soni} marta)`,
   ];
+  if (t.sana_ocr) parts.push(` · sana OCR ${t.sana_ocr} s (${t.sana_ocrlar.join(", ")})`);
   if (answer.solishtirish) {
     const rows = Object.values(answer.solishtirish);
     const ok = rows.filter((r) => r.mos === true).length;
@@ -133,6 +134,9 @@ function fieldCard(field, flagged) {
   if (flagged) head.append(el("span", { className: "badge" }, "⚠ Tekshiring"));
   const card = el("div", { className: `card f-${field.key}` }, head, input);
   card.dataset.field = field.key;
+  if (flagged && input.value) {
+    card.append(el("p", { className: "hint" }, "AI o'qidi, lekin ishonch to'liq emas — ramka bilan solishtiring."));
+  }
 
   const suggestions = suggestionsOf(answer, field.key);
   if (suggestions.length) {

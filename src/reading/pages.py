@@ -57,6 +57,11 @@ def _ocr(page: pymupdf.Page, number: int, stats: OcrStats | None, lang: str = "r
     return result
 
 
+def open_pdf(pdf: Path | bytes) -> pymupdf.Document:
+    """Fayl yo'li yoki baytlar (API: yuklangan PDF diskka yozilmaydi — xotiradan ochiladi)."""
+    return pymupdf.open(stream=pdf, filetype="pdf") if isinstance(pdf, bytes) else pymupdf.open(pdf)
+
+
 def extract_pages(
     pdf: Path | bytes, max_pages: int | None = None, stats: OcrStats | None = None
 ) -> list[CachedPage]:
@@ -65,8 +70,7 @@ def extract_pages(
     max_pages — faqat dastlabki N sahifa (None — hammasi, kesh uchun).
     stats — berilsa, OCR'ga ketgan vaqt shu yerga yig'iladi (API javobidagi "vaqt")."""
     pages = []
-    doc = pymupdf.open(stream=pdf, filetype="pdf") if isinstance(pdf, bytes) else pymupdf.open(pdf)
-    with doc:
+    with open_pdf(pdf) as doc:
         for i, page in enumerate(doc):
             number = i + 1
             if max_pages is not None and number > max_pages:
