@@ -82,6 +82,9 @@ manzilni o'qiy olmadi", "Toshkent shahri va viloyati adashtirildi"). O'lchov 30 
 ### B7. Prototip
 - **API** (FastAPI): `POST /extract`. PDF qabul qiladi, JSON qaytaradi. Ichki tizimga ulash uchun.
 - **Oddiy veb-sahifa:** chapda PDF, o'ngda AI to'ldirgan maydonlar. Namoyish uchun.
+- **Test rejimi (rahbar talabi, 23.10):** bitta xatni yoki papkadagi barcha xatlarni sinash. Papka
+  rejimida xatlar ketma-ket o'tadi, natijalar jadvalda chiqadi. To'g'ri javob (json) bo'lsa — har
+  maydon bo'yicha aniqlik ham.
 
 Telegram bot qilinmaydi, chunki hujjatlar tashqi serverga chiqib ketadi.
 
@@ -102,12 +105,15 @@ README (qanday ishga tushiriladi) va hisobot: tanlangan usullar, aniqlik, cheklo
 7. Notarius meros ishi uchun FHDYO hujjatini so'rasa, xat notariatga beriladimi yoki viloyat adliya boshqarmasiga?
 8. Ijrochi boshqarmalarning rasmiy ro'yxati (EDO'dagi nomlar). Dev'da Buxoro va Navoiy uchramagan, nomlar esa
    bir xil qolipda emas (12 tadan 5 tasi "<hudud> adliya boshqarmasi" shaklida).
+9. *(23.10 da so'raldi)* Bir xatda turli viloyatlardan bir nechta guvohnoma so'ralsa (100 ta namunada
+   uchramagan), har viloyat uchun `tasks` ichida alohida task ochiladimi?
 
 ## D. Xavflar
 
 - **Qo'lyozma** sana va raqamlar: Tesseract ularni yaxshi o'qimaydi. Kerak bo'lsa, kuchliroq lokal OCR sinab ko'riladi.
 - **Kam ma'lumot:** imtihon to'plamida bor-yo'g'i 30 ta xat, shuning uchun foizlar taxminiy bo'ladi.
-- **Bir nechta viloyatli xat** namunalarda uchramadi. Kod uni qo'llab-quvvatlaydi, lekin real xatda sinalmagan.
+- **Bir nechta viloyatli xat** (topshiriq tavsifida bor: bir xatda turli viloyatlardan bir nechta guvohnoma
+  so'ralsa, task ham bir nechta) 100 ta namunada uchramadi — har xatda aynan 1 task. Kod hozir bitta viloyat tanlaydi.
 - **O'qilmaydigan ilovalar** (qo'lda to'ldirilgan shakllar, FHDYO guvohnomalari): manzil faqat ularda bo'lsa,
   hudud topilmaydi — "tekshirish kerak".
 - **Notanish tashkilotlar:** 33 tadan ko'p bo'lishi mumkin.
