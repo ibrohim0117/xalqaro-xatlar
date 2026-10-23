@@ -78,6 +78,18 @@ def parse_date(text: str, skip_after_ot: bool = False) -> str | None:
     return None
 
 
+def all_dates(text: str) -> list[tuple[str, bool]]:
+    """Matndagi BARCHA sanalar, matndagi tartibida: (sana, oldida "от" bormi)."""
+    low = text.lower()
+    found = []
+    for pattern, parts in DATE_PATTERNS:
+        for m in pattern.finditer(low):
+            day, month, year = parts(m)
+            if month and (date := make_date(day, month, year)):
+                found.append((m.start(), date, after_ot(low, m.start())))
+    return [(date, ot) for _, date, ot in sorted(found)]
+
+
 def is_date_token(token: str) -> bool:
     """So'z BUTUNLIGICHA sanami: "05.12.2025" — ha. "17/08-10/2934", "3-3-28/16847" — yo'q: ichida
     sanaga o'xshash bo'lak bor ("17/08-10" -> 17.08.2010), lekin raqam guruhlari 3 tadan ko'p."""

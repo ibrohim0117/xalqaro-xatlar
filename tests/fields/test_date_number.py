@@ -3,6 +3,7 @@
 import pytest
 
 from src.fields.date_number import (
+    all_dates,
     date_and_number,
     is_date_token,
     parse_date,
@@ -126,3 +127,8 @@ def test_is_date_token(token, expected):
 )
 def test_parse_number_from_ocr_text(text, expected):
     assert parse_number(text) == expected
+
+
+def test_all_dates_in_order_with_ot_mark():
+    text = "05.12.2025 № 54/07 На № 17/08 от 01.10.2025. Справка от 3 мая 2024 г."
+    assert all_dates(text) == [("05.12.2025", False), ("01.10.2025", True), ("03.05.2024", True)]
