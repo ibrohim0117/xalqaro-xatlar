@@ -105,3 +105,40 @@ def choose_region(hits: list[Hit]) -> str | None:
         score[hit.key] += hit.weight
         first.setdefault(hit.key, hit.start)
     return max(score, key=lambda key: (score[key], -first[key]))
+
+
+# ── B4.3: notariat ──
+# Mavzu xatning asosiy matnida (1–2-sahifa). Hamma sahifada "нотари…" viloyat xatlarida ko'payadi
+# (dev: 1/57 -> 4/57): ilovalarda "нотариально заверенная копия" kabi iboralar bor.
+NOTARY_PAGES = 2
+NOTARY = re.compile(r"нотари|notar")
+CERTIFIED_COPY = re.compile(
+    r"нотариальн\w*\s+(?:заверен|удостоверен)\w*|(?:заверен|удостоверен)\w*\s+нотариальн\w*"
+)
+INHERITANCE = re.compile(r"наследств|наследник|наследодател|завещ|имуществ")
+# "mention" — "нотари…" uchradi (N1); "no_copies" — "notarius tasdiqlagan nusxa" iborasisiz (N2);
+# "inheritance" — "нотари…" va meros so'zi birga (N3)
+NOTARY_MODES = ("mention", "no_copies", "inheritance")
+
+
+def is_notary(pages: list[CachedPage], mode: str = "mention") -> bool:
+    """Xat notariat (meros) ishimi: 1–2-sahifa matnida, qabul qiluvchi blokisiz."""
+    low = prepare(recipient_and_body(pages, max_pages=NOTARY_PAGES)[1])
+    if mode == "no_copies":
+        low = CERTIFIED_COPY.sub(" ", low)
+    found = bool(NOTARY.search(low))
+    if mode == "inheritance":
+        return found and bool(INHERITANCE.search(low))
+    return found
+
+
+def predict_group(
+    pages: list[CachedPage], notary_mode: str = "mention"
+) -> tuple[str | None, str | None]:
+    """(guruh, hudud kaliti). Avval notariat, keyin hudud. Ikkalasi ham topilmasa — (None, None):
+    "tekshirish kerak". "Hudud yo'q -> xalqaro" qoidasi ataylab qo'llanmaydi: dev'da 2 ta xalqaro
+    xat evaziga 5 ta viloyat xatini noto'g'ri yuborardi."""
+    if is_notary(pages, notary_mode):
+        return "notariat", None
+    region = choose_region(letter_regions(pages))
+    return ("viloyat", region) if region else (None, None)
