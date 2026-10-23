@@ -23,6 +23,7 @@ READERS: dict[str, tuple[str, str, dict]] = {
     "tesseract-sparse": ("src.reading.engines.tesseract", "TesseractReader", {"psm": 11}),
     "rapidocr": ("src.reading.engines.rapid", "RapidReader", {}),
     "rapidocr-eslav": ("src.reading.engines.rapid", "RapidReader", {"rec": "eslav"}),
+    "vlm": ("src.reading.engines.vlm", "VlmReader", {}),  # server: scripts/ocr/vlm_server.sh
     "tesseract-digits-block": (
         "src.reading.engines.tesseract",
         "TesseractReader",

@@ -82,7 +82,8 @@ def main() -> None:
     for name in args.readers:
         reader = make_reader(name)
         stats, times, read = Counter(), [], {}
-        for doc_id in dev:
+        for number, doc_id in enumerate(dev, 1):
+            print(f"\r  {name}: {number}/{n} xat o'qilyapti…", end="", flush=True)
             folder = CROPS_DIR / doc_id
             texts = {}
             for crop in ("date", "number", "line", "header"):
@@ -99,7 +100,7 @@ def main() -> None:
         (OUT_DIR / f"{name}.json").write_text(json.dumps(read, ensure_ascii=False, indent=1))
 
         median = statistics.median(times) * 1000 if times else 0
-        print(f"  {name}  (bitta bo'lak: {median:.0f} ms)")
+        print(f"\r  {name}  (bitta bo'lak: {median:.0f} ms){' ' * 20}")
         print(f"    {'':<28}{'javob':>7}{'to`g`ri':>10}{'ishonchlilik':>15}")
         for row, _ in ROWS:
             answered, right = stats[row, "javob"], stats[row, "to'g'ri"]

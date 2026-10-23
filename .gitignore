@@ -7,6 +7,7 @@ outputs/
 __pycache__/
 *.pyc
 .venv/
+.venv-vlm/  # VLM (mlx-vlm) alohida muhitda: opencv paketlari asosiy muhit bilan to'qnashadi
 .ruff_cache/
 .pytest_cache/
 
