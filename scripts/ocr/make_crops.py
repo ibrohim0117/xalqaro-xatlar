@@ -20,7 +20,7 @@ from pathlib import Path
 
 import pymupdf
 
-from src.engine.locate import date_number_boxes, reply_box
+from src.engine.locate import ocr_regions
 from src.evaluation.dataset import list_letters, load_split
 from src.evaluation.text_cache import get_pages
 from src.fields.date_number import find_anchor
@@ -28,19 +28,6 @@ from src.reading.crops import crop_png
 from src.reading.pages import CachedPage
 
 OUT_DIR = Path("outputs/crops")
-HEADER = {"sahifa": 1, "x0": 0.0, "y0": 0.0, "x1": 0.6, "y1": 0.5}  # dev: langar y 0.05–0.46
-
-
-def regions(first: CachedPage) -> dict[str, dict]:
-    """Bo'lak nomi -> joyi (engine/locate bilan bir xil — sahifadagi ramkalar)."""
-    found = {"header": HEADER}
-    halves = date_number_boxes(first)
-    if halves:
-        date, number = halves["hujjat_sana"][0], halves["hujjat_raqami"][0]
-        found |= {"line": {**date, "x1": number["x1"]}, "date": date, "number": number}
-    if (reply := reply_box(first)) is not None:
-        found["reply"] = reply
-    return found
 
 
 def anchor_source(first: CachedPage) -> str:
@@ -61,7 +48,7 @@ def main() -> None:
         first = get_pages(letter)[0]
         folder = OUT_DIR / doc_id
         folder.mkdir(parents=True, exist_ok=True)
-        found = regions(first)
+        found = ocr_regions(first)
         with pymupdf.open(letter.pdf) as doc:
             for name, place in found.items():
                 (folder / f"{name}.png").write_bytes(crop_png(doc[0], place))

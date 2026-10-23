@@ -15,7 +15,7 @@ from collections import Counter
 
 import pymupdf
 
-from scripts.ocr.make_crops import regions
+from src.engine.locate import ocr_regions
 from src.evaluation.dataset import list_letters, load_split
 from src.evaluation.text_cache import get_pages
 from src.fields.date_number import DATE_BAND, SAME_LINE, find_anchor, is_date_token, parse_number
@@ -56,7 +56,7 @@ def main() -> None:
             pages["burilgan (rotation != 0)"] += page.rotation != 0
             pages["boshlanishi (0, 0) emas"] += tuple(page.rect[:2]) != (0, 0)
         first = get_pages(letter)[0]
-        found = regions(first)
+        found = ocr_regions(first)
         if "line" not in found:
             continue
         for source, text in (("matn qatlami", first.text_layer), ("OCR", first.ocr)):

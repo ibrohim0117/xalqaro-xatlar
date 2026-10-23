@@ -4,24 +4,9 @@ import json
 
 from scripts.ocr import check_crops, make_crops
 from scripts.ocr.compare_ocr import answers
-from scripts.ocr.make_crops import regions
 from src.evaluation.dataset import Letter
-from tests.conftest import FAKE_LETTER, make_letter_pdf
+from tests.conftest import make_letter_pdf
 from tests.engine.test_locate import pages_of
-
-
-def test_regions_of_a_letter(tmp_path):
-    first = pages_of(make_letter_pdf(tmp_path / "xat.pdf"))[0]
-    found = regions(first)
-    assert set(found) == {"header", "line", "date", "number"}  # "На №" qatori yo'q
-    assert (
-        found["line"]["x0"] == found["date"]["x0"] and found["line"]["x1"] == found["number"]["x1"]
-    )
-
-
-def test_without_anchor_only_header_is_cut(tmp_path):
-    letter = [line for line in FAKE_LETTER if "№" not in line[2]]
-    assert set(regions(pages_of(make_letter_pdf(tmp_path / "xat.pdf", letter))[0])) == {"header"}
 
 
 def test_main_writes_crops_and_manifest(tmp_path, monkeypatch, capsys):

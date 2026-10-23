@@ -1,8 +1,8 @@
-"""scripts/ocr/combine_dates.py testlari — to'qilgan OCR matnlari bilan."""
+"""src/fields/date_vote.py testlari — to'qilgan OCR matnlari bilan."""
 
 from datetime import date
 
-from scripts.ocr.combine_dates import (
+from src.fields.date_vote import (
     confirmed,
     engine_dates,
     header_anchor_date,

@@ -68,6 +68,22 @@ def reply_box(first: CachedPage) -> dict | None:
     )
 
 
+HEADER_BOX = {"sahifa": 1, "x0": 0.0, "y0": 0.0, "x1": 0.6, "y1": 0.5}  # dev: "№" y 0.05–0.46
+
+
+def ocr_regions(first: CachedPage) -> dict[str, dict]:
+    """Qo'lyozma OCR uchun bo'laklar (B5.3b): line — "sana № raqam" qatori, date — "№" dan chapi,
+    number — o'ngi, reply — "На № … от …", header — chap yuqori qism ("№" topilmasa ham bor)."""
+    found = {"header": HEADER_BOX}
+    halves = date_number_boxes(first)
+    if halves:
+        date, number = halves["hujjat_sana"][0], halves["hujjat_raqami"][0]
+        found |= {"line": {**date, "x1": number["x1"]}, "date": date, "number": number}
+    if (reply := reply_box(first)) is not None:
+        found["reply"] = reply
+    return found
+
+
 def locate(pages: list[CachedPage]) -> dict[str, list[dict]]:
     """Maydon -> to'rtburchaklar. Joyi aniqlanmagan maydon ro'yxatga kirmaydi (masalan, mazmun)."""
     first = pages[0]
