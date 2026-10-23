@@ -10,7 +10,7 @@ ANDIJON = "Andijon viloyat adliya bo'limi (soxta)"  # shablonga mos emas
 NOTARIAT = "Notariat boshqarmasi (soxta)"
 
 
-def truth(boshqarma: str, summary: str = "Standart mazmun") -> dict:
+def truth(boshqarma: str, summary: str = "Standart mazmun", sender: str | None = None) -> dict:
     if "notariat" in boshqarma.lower():
         task = {
             "asosiy_ijrochilar": ["SOXTA XODIM"],
@@ -18,7 +18,8 @@ def truth(boshqarma: str, summary: str = "Standart mazmun") -> dict:
         }
     else:
         task = {"asosiy_ijrochilar": [boshqarma], "asosiy_ijrochilar_boshqarmalari": []}
-    return {"rekvizit_document": {"hujjatning_qisqacha_mazmuni": summary}, "tasks": [task]}
+    doc = {"hujjatning_qisqacha_mazmuni": summary, "hujjat_junatuvchi_tashkilot": sender}
+    return {"rekvizit_document": doc, "tasks": [task]}
 
 
 def pages_of(text: str) -> list[CachedPage]:
@@ -70,3 +71,31 @@ def test_model_save_and_load(tmp_path):
     save_model(MODEL, tmp_path / "model.json")
     assert load_model(tmp_path / "model.json") == MODEL
     assert Model() == Model(names={}, summary=None)
+
+
+# Jo'natuvchi: har tashkilotdan 2 tadan to'qilgan xat (filtr "kamida 2 xatda" bo'lgani uchun)
+NOVO = "Главное управление Министерства юстиции России по Новосибирской области направляет"
+GEORGIA = "Министерство юстиции Грузии Агентство развития государственных сервисов просит"
+SENDER_MODEL = learn_model(
+    [truth(FARGONA, sender="Soxta Novosibirsk")] * 2 + [truth(FARGONA, sender="Soxta Gruziya")] * 2,
+    [NOVO + " Каримову", NOVO + " Сидорову", GEORGIA + " Алиеву", GEORGIA + " Петрову"],
+)
+
+
+def test_sender_model_stores_only_shared_words():
+    assert SENDER_MODEL.sender_names == ["Soxta Novosibirsk"] * 2 + ["Soxta Gruziya"] * 2
+    assert "новосибирской" in SENDER_MODEL.sender_texts[0]
+    assert not any("каримову" in text for text in SENDER_MODEL.sender_texts)  # ism saqlanmadi
+
+
+def test_predict_finds_familiar_sender():
+    text = "ГУ Минюста России по Новосибирской области, Ферганская область"
+    answer = predict(pages_of(text), SENDER_MODEL)
+    assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] == "Soxta Novosibirsk"
+    assert "hujjat_junatuvchi_tashkilot" not in answer["tekshirish_kerak"]
+
+
+def test_unknown_sender_is_flagged_not_guessed():
+    answer = predict(pages_of("Министерство юстиции Республики Молдова просит"), SENDER_MODEL)
+    assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] is None
+    assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]

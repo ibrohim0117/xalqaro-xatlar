@@ -1,8 +1,9 @@
-"""B4.4: bitta xat uchun AI javobi — hozircha boshqarma va qisqacha mazmun.
+"""B4.4, B5.1: bitta xat uchun AI javobi — boshqarma, jo'natuvchi tashkilot, qisqacha mazmun.
 
 "Model" — dev xatlardan o'rganilgan qiymatlar: har hudud (va notariat) uchun boshqarmaning to'liq
-nomi va eng ko'p uchraydigan qisqacha mazmun. U outputs/model.json da (gitignore'da) saqlanadi:
-nomlarni Claude ko'rmaydi, kod ularni json'lardan o'zi oladi.
+nomi, eng ko'p uchraydigan qisqacha mazmun va jo'natuvchini topish uchun dev xatlari 1-sahifasining
+so'zlari (faqat kamida 2 xatda uchraganlari — fuqaro ismlari saqlanmaydi) hamda jo'natuvchi nomlari.
+U outputs/model.json da (gitignore'da) saqlanadi: nomlarni Claude ko'rmaydi.
 
 Javob shakli — xodim to'ldiradigan json bilan bir xil, ustiga "tekshirish_kerak" ro'yxati.
 """
@@ -16,6 +17,7 @@ from src.boshqarma import predict_group
 from src.dataset import expected_boshqarma, group_of
 from src.evaluate import REKVIZIT_FIELDS, normalize
 from src.regions import REGIONS, region_of_boshqarma
+from src.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text, prune
 from src.text_cache import CachedPage
 
 MODEL_FILE = Path("outputs/model.json")
@@ -31,10 +33,19 @@ def template_name(key: str) -> str:
 class Model:
     names: dict[str, str] = field(default_factory=dict)  # "fargona"/"notariat" -> to'liq nom
     summary: str | None = None
+    sender_texts: list[str] = field(default_factory=list)  # dev xatlari 1-sahifasi (filtrlangan)
+    sender_names: list[str] = field(default_factory=list)  # ularning jo'natuvchilari
 
 
-def learn_model(truths: list[dict]) -> Model:
-    """Faqat DEV json'laridan: har kalit uchun eng ko'p uchragan boshqarma nomi va mazmun."""
+def sender_part(first_pages: list[str], truths: list[dict]) -> tuple[list[str], list[str]]:
+    """Jo'natuvchini topish uchun: filtrlangan 1-sahifa matnlari va json'dagi nomlar."""
+    names = [(t.get("rekvizit_document") or {}).get("hujjat_junatuvchi_tashkilot") for t in truths]
+    pairs = [(text, name) for text, name in zip(prune(first_pages), names, strict=True) if name]
+    return [text for text, _ in pairs], [name for _, name in pairs]
+
+
+def learn_model(truths: list[dict], first_pages: list[str] | None = None) -> Model:
+    """Faqat DEV xatlaridan: boshqarma nomlari, mazmun va jo'natuvchilar (1-sahifa bilan)."""
     by_key: dict[str, list[str]] = {}
     for truth in truths:
         name = expected_boshqarma(truth)
@@ -45,7 +56,8 @@ def learn_model(truths: list[dict]) -> Model:
     summaries = [
         (t.get("rekvizit_document") or {}).get("hujjatning_qisqacha_mazmuni") for t in truths
     ]
-    return Model(names, most_common(summaries)[0])
+    sender_texts, sender_names = sender_part(first_pages, truths) if first_pages else ([], [])
+    return Model(names, most_common(summaries)[0], sender_texts, sender_names)
 
 
 def template_matches(model: Model) -> tuple[int, int]:
@@ -81,6 +93,13 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         flags.append("boshqarma")
     rekvizit = dict.fromkeys(REKVIZIT_FIELDS)
     rekvizit["hujjatning_qisqacha_mazmuni"] = model.summary
+    if model.sender_texts:
+        matcher = Matcher(model.sender_texts, model.sender_names)
+        sender, score = matcher.best(header_text(pages, SENDER_MODE))
+        if score >= SENDER_THRESHOLD:
+            rekvizit["hujjat_junatuvchi_tashkilot"] = sender
+        else:  # notanish jo'natuvchi — taxmin yozilmaydi
+            flags.append("hujjat_junatuvchi_tashkilot")
     return {
         "rekvizit_document": rekvizit,
         "tasks": [{"asosiy_ijrochilar_boshqarmalari": [name] if name else []}],
