@@ -28,9 +28,9 @@ def main() -> None:
     dev = load_split()["dev"]
     pages = [get_pages(letters[doc_id]) for doc_id in dev]
     truths = [load_truth(letters[doc_id]) for doc_id in dev]
-    first = [header_text(p, SENDER_MODE) for p in pages]
+    blanks = [header_text(p, SENDER_MODE) for p in pages]  # jo'natuvchi blanki
 
-    model = learn_model(truths, first)  # hamma 70 ta dev xatdan — prototip va test uchun
+    model = learn_model(truths, blanks)  # hamma 70 ta dev xatdan — prototip va test uchun
     save_model(model)
     same, total = template_matches(model)
     print(f"Model dev'dan o'rganildi: {len(model.names)} ta boshqarma nomi, qisqacha mazmun,")
@@ -41,7 +41,7 @@ def main() -> None:
     flags = Counter()
     for i, doc_id in enumerate(dev):
         rest = [j for j in range(len(dev)) if j != i]  # leave-one-out: xatning o'zisiz
-        model_i = learn_model([truths[j] for j in rest], [first[j] for j in rest])
+        model_i = learn_model([truths[j] for j in rest], [blanks[j] for j in rest])
         answer = predict(pages[i], model_i)
         flags.update(answer["tekshirish_kerak"])
         text = json.dumps(answer, ensure_ascii=False, indent=2)

@@ -15,10 +15,12 @@ from src.evaluate import normalize
 from src.sender import HEADER_MODES, METHODS, SENDER_THRESHOLD, Matcher, header_text, prune
 from src.text_cache import get_pages
 
-THRESHOLDS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
-# Tanlangan variant: ballari eng yaxshisi bilan teng (53/70), lekin "№" langariga bog'liq emas
-# va umumiy matn (qabul qiluvchi bloki) uni buzmaydi: full+fuzz 29 ga tushdi, full+tfidf 52 da qoldi
-CHOSEN = ("page", "tfidf")
+THRESHOLDS = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+# Nomzodlar (TF-IDF): (blank qismi, "kamida N xatda" filtri).
+# B5.1b: page + filtr 2 tanlangan edi. B5.1c: xodim tasdiqlagan BITTA xat uchun filtr ishlamaydi,
+# shuning uchun xotiraga faqat blank ("full": "№" qatoridan yuqori) yoziladi — unda fuqaro ismi yo'q
+CANDIDATES = [("page", 1), ("page", 2), ("full", 1)]
+CHOSEN = ("full", "tfidf", 1)
 
 
 def leave_one_out(
@@ -59,17 +61,17 @@ def main() -> None:
             share, share_fam = f"({ok / n:4.0%})", f"({ok_fam / n_fam:4.0%})"
             print(f"  {mode:<12}{method:<8}{ok:>6} {share}{ok_fam:>11}/{n_fam} {share_fam}")
 
-    texts = [header_text(p, CHOSEN[0]) for p in pages]
-    for min_df in (1, 2):
-        res = leave_one_out(texts, names, CHOSEN[1], min_df)
+    for mode, min_df in CANDIDATES:
+        texts = [header_text(p, mode) for p in pages]
+        res = leave_one_out(texts, names, "tfidf", min_df)
         ok = sum(c for c, _ in res)
         sure = [c for c, score in res if score >= SENDER_THRESHOLD]
         print(
-            f"\n  {CHOSEN[0]} + {CHOSEN[1]}, modelda so'z kamida {min_df} xatda: to'g'ri {ok}/{n}, "
+            f"\n  {mode} + tfidf, so'z kamida {min_df} xatda: to'g'ri {ok}/{n}, "
             f"chegara {SENDER_THRESHOLD} da javob {len(sure)}, to'g'ri {sum(sure)}"
         )
-        results[(*CHOSEN, min_df)] = res
-    best = (*CHOSEN, 2)
+        results[(mode, "tfidf", min_df)] = res
+    best = CHOSEN
     print(f"\n  Tanlangan: {best[0]} + {best[1]}, so'z kamida {best[2]} xatda. Chegara bo'yicha:")
     print(f"    {'chegara':<9}{'javob berdi':>14}{'to`g`ri':>10}{'ishonchlilik':>15}")
     for t in THRESHOLDS:

@@ -24,11 +24,14 @@ from src.text_cache import CachedPage
 HEADER_MODES = ("left", "full", "page")
 METHODS = ("fuzz", "tfidf")
 TOKEN = re.compile(r"[a-zа-яёўқғҳ']{3,}")  # kamida 3 harfli so'zlar (raqamlar va bo'laklar emas)
-SENDER_MODE, SENDER_METHOD = "page", "tfidf"  # B5.1b: "№" langariga bog'liq emas, buzilmaydi
-# Halol leave-one-out (model qolgan 69 xatdan, so'z kamida 2 xatda): >= 0.6 da 51 javob, xatosiz;
-# 0.5–0.6 oralig'ida 7 tadan 1 tasi to'g'ri. (Avval biroz oqib ketgan o'lchovda 0.4 tanlangan edi.)
-SENDER_THRESHOLD = 0.6
-MIN_DF = 2  # modelda faqat kamida 2 ta xatda uchragan so'zlar — fuqaro ismlari saqlanmaydi
+# B5.1c: xotirada faqat BLANK ("№" qatoridan yuqori, butun kenglik) — unda fuqaro ismi yo'q,
+# shuning uchun xodim tasdiqlagan bitta xatni ham filtrsiz saqlash mumkin (qayta aloqa).
+# Dev, halol leave-one-out: >= 0.7 da 48 javob, xatosiz (0.6 da 51 javob, 1 xato).
+# Avvalgi variant (butun 1-sahifa + "kamida 2 xatda" filtri) 51/51 bergan, lekin yangi
+# tashkilotning o'ziga xos so'zlarini filtr tashlab yuboradi — qayta aloqa bilan ishlamaydi.
+SENDER_MODE, SENDER_METHOD = "full", "tfidf"
+SENDER_THRESHOLD = 0.7
+MIN_DF = 2  # prune() uchun standart qiymat (B5.1b o'lchovida ishlatilgan)
 
 
 def header_text(pages: list[CachedPage], mode: str = "full") -> str:
@@ -47,6 +50,11 @@ def header_text(pages: list[CachedPage], mode: str = "full") -> str:
 
 def tokens(text: str) -> list[str]:
     return TOKEN.findall(prepare(text))
+
+
+def blank_words(text: str) -> str:
+    """Xotiraga yoziladigan ko'rinish: faqat 3+ harfli so'zlar — telefon, raqam va sanalarsiz."""
+    return " ".join(tokens(text))
 
 
 def prune(texts: list[str], min_df: int = MIN_DF) -> list[str]:

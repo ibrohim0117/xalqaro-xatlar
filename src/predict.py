@@ -1,8 +1,8 @@
 """B4.4, B5.1–B5.3: bitta xat uchun AI javobi — boshqarma, jo'natuvchi, imzo, sana, mazmun.
 
 "Model" — dev xatlardan o'rganilgan qiymatlar: har hudud (va notariat) uchun boshqarmaning to'liq
-nomi, eng ko'p uchraydigan qisqacha mazmun va jo'natuvchini topish uchun dev xatlari 1-sahifasining
-so'zlari (faqat kamida 2 xatda uchraganlari — fuqaro ismlari saqlanmaydi) hamda jo'natuvchi nomlari.
+nomi, eng ko'p uchraydigan qisqacha mazmun va jo'natuvchini topish uchun dev xatlari blankining
+so'zlari (blankda fuqaro ismi yo'q; telefon va raqamlar saqlanmaydi) hamda jo'natuvchi nomlari.
 U outputs/model.json da (gitignore'da) saqlanadi: nomlarni Claude ko'rmaydi.
 
 Javob shakli — xodim to'ldiradigan json bilan bir xil, ustiga "tekshirish_kerak" ro'yxati.
@@ -18,7 +18,7 @@ from src.dataset import expected_boshqarma, group_of
 from src.date_number import date_number_answer
 from src.evaluate import REKVIZIT_FIELDS, normalize
 from src.regions import REGIONS, region_of_boshqarma
-from src.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text, prune
+from src.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, blank_words, header_text
 from src.signer import SIGNER_MIN_Y, SIGNER_PAGES, candidates, choose_signer
 from src.text_cache import CachedPage
 
@@ -35,18 +35,18 @@ def template_name(key: str) -> str:
 class Model:
     names: dict[str, str] = field(default_factory=dict)  # "fargona"/"notariat" -> to'liq nom
     summary: str | None = None
-    sender_texts: list[str] = field(default_factory=list)  # dev xatlari 1-sahifasi (filtrlangan)
+    sender_texts: list[str] = field(default_factory=list)  # dev xatlari blankining so'zlari
     sender_names: list[str] = field(default_factory=list)  # ularning jo'natuvchilari
 
 
-def sender_part(first_pages: list[str], truths: list[dict]) -> tuple[list[str], list[str]]:
-    """Jo'natuvchini topish uchun: filtrlangan 1-sahifa matnlari va json'dagi nomlar."""
+def sender_part(blanks: list[str], truths: list[dict]) -> tuple[list[str], list[str]]:
+    """Jo'natuvchini topish uchun: blanklarning so'zlari va json'dagi nomlar."""
     names = [(t.get("rekvizit_document") or {}).get("hujjat_junatuvchi_tashkilot") for t in truths]
-    pairs = [(text, name) for text, name in zip(prune(first_pages), names, strict=True) if name]
+    pairs = [(blank_words(b), name) for b, name in zip(blanks, names, strict=True) if name]
     return [text for text, _ in pairs], [name for _, name in pairs]
 
 
-def learn_model(truths: list[dict], first_pages: list[str] | None = None) -> Model:
+def learn_model(truths: list[dict], blanks: list[str] | None = None) -> Model:
     """Faqat DEV xatlaridan: boshqarma nomlari, mazmun va jo'natuvchilar (1-sahifa bilan)."""
     by_key: dict[str, list[str]] = {}
     for truth in truths:
@@ -58,7 +58,7 @@ def learn_model(truths: list[dict], first_pages: list[str] | None = None) -> Mod
     summaries = [
         (t.get("rekvizit_document") or {}).get("hujjatning_qisqacha_mazmuni") for t in truths
     ]
-    sender_texts, sender_names = sender_part(first_pages, truths) if first_pages else ([], [])
+    sender_texts, sender_names = sender_part(blanks, truths) if blanks else ([], [])
     return Model(names, most_common(summaries)[0], sender_texts, sender_names)
 
 

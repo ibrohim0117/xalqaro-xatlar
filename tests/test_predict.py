@@ -73,30 +73,39 @@ def test_model_save_and_load(tmp_path):
     assert Model() == Model(names={}, summary=None)
 
 
-# Jo'natuvchi: har tashkilotdan 2 tadan to'qilgan xat (filtr "kamida 2 xatda" bo'lgani uchun)
-NOVO = "Главное управление Министерства юстиции России по Новосибирской области направляет"
-GEORGIA = "Министерство юстиции Грузии Агентство развития государственных сервисов просит"
+# Jo'natuvchi: to'qilgan blanklar (sahifaning yuqori qismi), telefon raqami bilan
+NOVO = "ГЛАВНОЕ УПРАВЛЕНИЕ МИНИСТЕРСТВА ЮСТИЦИИ ПО НОВОСИБИРСКОЙ ОБЛАСТИ тел. (383) 304-86-27"
+GEORGIA = "Министерство юстиции Грузии Агентство развития государственных сервисов"
 SENDER_MODEL = learn_model(
-    [truth(FARGONA, sender="Soxta Novosibirsk")] * 2 + [truth(FARGONA, sender="Soxta Gruziya")] * 2,
-    [NOVO + " Каримову", NOVO + " Сидорову", GEORGIA + " Алиеву", GEORGIA + " Петрову"],
+    [truth(FARGONA, sender="Soxta Novosibirsk"), truth(FARGONA, sender="Soxta Gruziya")],
+    [NOVO, GEORGIA],
 )
 
 
-def test_sender_model_stores_only_shared_words():
-    assert SENDER_MODEL.sender_names == ["Soxta Novosibirsk"] * 2 + ["Soxta Gruziya"] * 2
+def letter_with_blank(blank: str) -> list[CachedPage]:
+    """Blank sahifa tepasida (y=0.1), viloyat matni pastroqda."""
+    words = [
+        Word(t, 0.1 + 0.03 * i, 0.1, 0.13 + 0.03 * i, 0.11, 0) for i, t in enumerate(blank.split())
+    ]
+    words += [Word("Ферганская", 0.1, 0.5, 0.2, 0.51, 1), Word("область", 0.21, 0.5, 0.3, 0.51, 1)]
+    return [CachedPage(1, PageText(1, "text_layer", words), None)]
+
+
+def test_sender_model_stores_blank_words_only():
+    assert SENDER_MODEL.sender_names == ["Soxta Novosibirsk", "Soxta Gruziya"]
     assert "новосибирской" in SENDER_MODEL.sender_texts[0]
-    assert not any("каримову" in text for text in SENDER_MODEL.sender_texts)  # ism saqlanmadi
+    assert not any(ch.isdigit() for ch in SENDER_MODEL.sender_texts[0])  # telefon saqlanmadi
 
 
 def test_predict_finds_familiar_sender():
-    text = "ГУ Минюста России по Новосибирской области, Ферганская область"
-    answer = predict(pages_of(text), SENDER_MODEL)
+    answer = predict(letter_with_blank(NOVO), SENDER_MODEL)  # shu tashkilotdan yana xat
     assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] == "Soxta Novosibirsk"
     assert "hujjat_junatuvchi_tashkilot" not in answer["tekshirish_kerak"]
 
 
 def test_unknown_sender_is_flagged_not_guessed():
-    answer = predict(pages_of("Министерство юстиции Республики Молдова просит"), SENDER_MODEL)
+    blank = "Министерство юстиции Республики Молдова Агентство публичных услуг"
+    answer = predict(letter_with_blank(blank), SENDER_MODEL)
     assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] is None
     assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]
 
