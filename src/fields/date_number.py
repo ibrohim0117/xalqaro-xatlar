@@ -108,7 +108,8 @@ def find_number(words: list[Word], anchor: int) -> str | None:
         if token.lower().startswith("от"):  # "№ ___ от ___" — raqam yo'q
             return None
         m = NUMBER.search(token)
-        if m and sum(ch.isdigit() for ch in m[0]) >= 2 and not parse_date(m[0]):
+        # is_date_token: "3-3-28/16847" ichidagi "3-3-28" sanaga o'xshasa ham — bu raqam
+        if m and sum(ch.isdigit() for ch in m[0]) >= 2 and not is_date_token(m[0]):
             number = m[0].rstrip(".")
             # "52/05-" — bosma boshi, davomi qo'lda yozilgan va o'qilmagan: chala raqam yozilmaydi
             return None if number.endswith(("-", "/")) else number

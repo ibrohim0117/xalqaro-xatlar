@@ -33,6 +33,13 @@ def test_typical_header_line():
     assert date_and_number(page(words)) == ("05.12.2025", "54/07-16606")
 
 
+@pytest.mark.parametrize("number", ["3-3-28/16847", "17/08-10/2934", "52/05-19719/25"])
+def test_number_containing_a_date_like_part(number):
+    # "3-3-28" sanaga o'xshaydi (03.03.2028), lekin so'z butunligicha — raqam
+    words = [("30.09.26", 0.1, 0.30), ("№", 0.3, 0.30), (number, 0.33, 0.30)]
+    assert date_and_number(page(words)) == ("30.09.2026", number)
+
+
 def test_number_glued_to_sign_and_date_on_other_side():
     words = [("2025", 0.1, 0.35), ("/", 0.14, 0.35), ("12", 0.16, 0.35), ("/22", 0.19, 0.35),
              ("№01/301495", 0.8, 0.35)]  # fmt: skip
