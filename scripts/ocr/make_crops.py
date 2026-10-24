@@ -24,10 +24,13 @@ from src.engine.locate import ocr_regions
 from src.evaluation.dataset import list_letters, load_split
 from src.evaluation.text_cache import get_pages
 from src.fields.date_number import find_anchor
-from src.reading.crops import crop_png
+from src.reading.crops import CROP_DPI, crop_png
 from src.reading.pages import CachedPage
 
 OUT_DIR = Path("outputs/crops")
+PAGE_DPI = (
+    200  # butun sahifa: VLM baribir 1600 px gacha kichraytiradi — 300 dpi ortiqcha (5 MB/sahifa)
+)
 
 
 def anchor_source(first: CachedPage) -> str:
@@ -51,7 +54,8 @@ def main() -> None:
         found = ocr_regions(first)
         with pymupdf.open(letter.pdf) as doc:
             for name, place in found.items():
-                (folder / f"{name}.png").write_bytes(crop_png(doc[0], place))
+                dpi = PAGE_DPI if name == "page" else CROP_DPI
+                (folder / f"{name}.png").write_bytes(crop_png(doc[0], place, dpi=dpi))
         source = anchor_source(first)
         manifest[doc_id] = {"bo'laklar": sorted(found), "langar": source}
         anchors[source] += 1
@@ -66,7 +70,9 @@ def main() -> None:
     )
     print(
         "  Bo'laklar:   "
-        + ", ".join(f"{k} {crops[k]}" for k in ("line", "date", "number", "reply", "header"))
+        + ", ".join(
+            f"{k} {crops[k]}" for k in ("line", "date", "number", "reply", "header", "page")
+        )
     )
 
 

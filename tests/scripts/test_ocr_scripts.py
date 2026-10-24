@@ -18,7 +18,7 @@ def test_main_writes_crops_and_manifest(tmp_path, monkeypatch, capsys):
     make_crops.main()
 
     files = sorted(p.name for p in (tmp_path / "crops" / "DOC_1").iterdir())
-    assert files == ["date.png", "header.png", "line.png", "number.png"]
+    assert files == ["date.png", "header.png", "line.png", "number.png", "page.png"]
     manifest = json.loads((tmp_path / "crops" / "manifest.json").read_text())
     assert manifest["DOC_1"]["langar"] == "matn qatlami"
     assert "line 1" in capsys.readouterr().out  # bo'laklar soni ekranda

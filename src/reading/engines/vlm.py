@@ -23,15 +23,32 @@ TRANSCRIBE = (
     "dates and numbers. Do not correct, complete or guess anything. If a part is unreadable, "
     "skip it. Output only the transcribed text."
 )
+# Aniq savol: xatning O'Z sanasi va chiqish raqami (javob — JSON; parse_date/parse_number o'qiydi).
+# "На № … от …" — bizning oldingi xatimiz sanasi, u kerak emas.
+EXTRACT = (
+    "This image is (part of) an official letter. Find the letter's OWN date and outgoing number. "
+    "They are usually written together on one line like '<date> № <number>', often by hand or "
+    "with a stamp. Do NOT use the reference line 'На № ... от ...' (a reply to another letter), "
+    "dates of birth or other dates in the text. Read digits exactly as written; do not guess. "
+    'Answer only JSON: {"sana": "DD.MM.YYYY" or null, "raqam": "<number>" or null}'
+)
+PROMPTS = {"transcribe": TRANSCRIBE, "extract": EXTRACT}
 
 
 class VlmReader:
     name = "vlm"
 
-    def __init__(self, url: str = VLM_URL, prompt: str = TRANSCRIBE, timeout: float = 300):
+    def __init__(
+        self,
+        url: str = VLM_URL,
+        mode: str = "transcribe",
+        timeout: float = 300,
+        max_side: int = MAX_SIDE,
+    ):
+        """mode: "transcribe" — matnni ko'chiradi; "extract" — xatning sanasi va raqami (JSON)."""
         if not url.startswith(LOCAL):
             raise ValueError(f"VLM faqat lokal manzilda bo'lishi kerak: {url}")
-        self.url, self.prompt, self.timeout = url, prompt, timeout
+        self.url, self.prompt, self.timeout, self.max_side = url, PROMPTS[mode], timeout, max_side
 
     def available(self) -> bool:
         """Server javob beryaptimi (/health). Yoqilmagan bo'lsa — VLM chetlanadi."""
@@ -44,7 +61,7 @@ class VlmReader:
 
     def read(self, png: bytes) -> str:
         image = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
-        scale = MAX_SIDE / max(image.shape[:2])
+        scale = self.max_side / max(image.shape[:2])
         if scale < 1:
             image = cv2.resize(image, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
         encoded = base64.b64encode(cv2.imencode(".png", image)[1].tobytes()).decode()

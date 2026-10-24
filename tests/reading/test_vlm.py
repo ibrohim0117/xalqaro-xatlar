@@ -54,3 +54,10 @@ def test_request_shape_and_answer(fake_server):
 def test_only_local_server_is_allowed():
     with pytest.raises(ValueError):
         VlmReader("https://example.com/v1/chat/completions")
+
+
+def test_extract_mode_asks_for_json(fake_server):
+    url, received = fake_server
+    VlmReader(url, mode="extract").read(png(100, 100))
+    question = received[0]["messages"][0]["content"][1]["text"]
+    assert '"sana"' in question and "На №" in question  # JSON so'raladi, "На №" chetlanadi

@@ -40,8 +40,11 @@ ROWS = [  # (qator nomi, maydon)
     ("sana: yangi qoida", "sana"),
     ("sana: header bo'lagi", "sana"),
     ("sana: yangi qoida + header", "sana"),
+    ("sana: page (butun sahifa)", "sana"),
     ("raqam: number bo'lagi", "raqam"),
     ("raqam: line bo'lagi", "raqam"),
+    ("raqam: header bo'lagi", "raqam"),
+    ("raqam: page (butun sahifa)", "raqam"),
 ]
 
 
@@ -61,7 +64,12 @@ def answers(texts: dict[str, str], text_layer_date: str | None) -> dict[str, str
         "sana: yangi qoida": text_layer_date or date_crop,
         "sana: header bo'lagi": header,
         "sana: yangi qoida + header": text_layer_date or date_crop or header,
+        "sana: page (butun sahifa)": parse_date(
+            texts.get("page", ""), skip_after_ot=True, patterns=OCR_PATTERNS
+        ),
         "raqam: number bo'lagi": parse_number(texts.get("number", "")),
+        "raqam: header bo'lagi": parse_number(texts.get("header", "")),
+        "raqam: page (butun sahifa)": parse_number(texts.get("page", "")),
         "raqam: line bo'lagi": parse_number(texts.get("line", "")),
     }
 
@@ -69,6 +77,12 @@ def answers(texts: dict[str, str], text_layer_date: str | None) -> dict[str, str
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("readers", nargs="+", choices=sorted(READERS))
+    parser.add_argument(
+        "--crops",
+        nargs="+",
+        default=["date", "number", "line", "header"],
+        help="o'qiladigan bo'laklar",
+    )
     args = parser.parse_args()
 
     letters = {letter.doc_id: letter for letter in list_letters()}
@@ -89,12 +103,16 @@ def main() -> None:
     print(f"  hozirgi tizim: sana {now}/{n} (matn qatlamidan), raqam 0/{n} (faqat taklif)\n")
     for name in args.readers:
         reader = make_reader(name)
+        if hasattr(reader, "available") and not reader.available():
+            print(f"  {name}: VLM serveri javob bermadi — avval alohida terminalda:")
+            print("    sh scripts/ocr/vlm_server.sh\n")
+            continue
         stats, times, read = Counter(), [], {}
         for number, doc_id in enumerate(dev, 1):
             print(f"\r  {name}: {number}/{n} xat o'qilyapti…", end="", flush=True)
             folder = CROPS_DIR / doc_id
             texts = {}
-            for crop in ("date", "number", "line", "header"):
+            for crop in args.crops:
                 path = folder / f"{crop}.png"
                 if path.exists():
                     start = time.perf_counter()

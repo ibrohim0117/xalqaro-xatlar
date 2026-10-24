@@ -67,14 +67,13 @@ def test_reply_line_box(tmp_path):
 def test_regions_of_a_letter(tmp_path):
     first = pages_of(make_letter_pdf(tmp_path / "xat.pdf"))[0]
     found = ocr_regions(first)
-    assert set(found) == {"header", "line", "date", "number"}  # "На №" qatori yo'q
+    assert set(found) == {"header", "page", "line", "date", "number"}  # "На №" qatori yo'q
     assert (
         found["line"]["x0"] == found["date"]["x0"] and found["line"]["x1"] == found["number"]["x1"]
     )
 
 
-def test_without_anchor_only_header_is_cut(tmp_path):
+def test_without_anchor_only_header_and_page_are_cut(tmp_path):
     letter = [line for line in FAKE_LETTER if "№" not in line[2]]
-    assert set(ocr_regions(pages_of(make_letter_pdf(tmp_path / "xat.pdf", letter))[0])) == {
-        "header"
-    }
+    first = pages_of(make_letter_pdf(tmp_path / "xat.pdf", letter))[0]
+    assert set(ocr_regions(first)) == {"header", "page"}  # "№" yo'q — header va butun sahifa

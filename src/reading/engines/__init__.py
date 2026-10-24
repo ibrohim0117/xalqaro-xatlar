@@ -24,6 +24,12 @@ READERS: dict[str, tuple[str, str, dict]] = {
     "rapidocr": ("src.reading.engines.rapid", "RapidReader", {}),
     "rapidocr-eslav": ("src.reading.engines.rapid", "RapidReader", {"rec": "eslav"}),
     "vlm": ("src.reading.engines.vlm", "VlmReader", {}),  # server: scripts/ocr/vlm_server.sh
+    # aniq savol: sana va raqam JSON'da; butun sahifa uchun kattaroq rasm
+    "vlm-extract": (
+        "src.reading.engines.vlm",
+        "VlmReader",
+        {"mode": "extract", "max_side": 1600},
+    ),
     "tesseract-digits-block": (
         "src.reading.engines.tesseract",
         "TesseractReader",
