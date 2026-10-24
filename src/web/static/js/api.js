@@ -23,6 +23,13 @@ export async function extract(pdf, truth = null, { images = false } = {}) {
   return readJson(await fetch(url, { method: "POST", body: form }));
 }
 
+/** Faqat sahifalar rasmi (OCR'siz, tez) — papkada tahlil qilingan xatni ko'rsatish uchun. */
+export async function pageImages(pdf) {
+  const form = new FormData();
+  form.append("pdf", pdf);
+  return readJson(await fetch("/pages", { method: "POST", body: form }));
+}
+
 /** Xodim tasdiqlagan jo'natuvchi nomi — xotiraga (keyingi xatlarda avtomatik taniladi). */
 export async function confirmSender(blankId, nom) {
   const response = await fetch("/confirm", {

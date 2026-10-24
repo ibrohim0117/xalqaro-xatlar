@@ -9,6 +9,7 @@ function openTab(name) {
     $(tab).hidden = tab !== name;
     $(`tab-${tab}`).setAttribute("aria-selected", String(tab === name));
   }
+  window.scrollTo({ top: 0 }); // holat qatori va natija ko'rinsin (jadval pastida qolib ketmasin)
 }
 
 $("tab-single").addEventListener("click", () => openTab("single"));

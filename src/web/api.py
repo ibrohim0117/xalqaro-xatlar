@@ -3,6 +3,7 @@
 GET  /         — sahifa (templates/index.html; CSS va JS — static/, internetdan hech narsa yo'q)
 POST /extract  — PDF (+ ixtiyoriy to'g'ri javob json'i — test rejimi) -> AI javobi, vaqt, blank_id,
                  joylar (har maydon qayerdan olingani); ?rasmlar=true — sahifalar rasmi ham
+POST /pages    — faqat sahifalar rasmi (OCR'siz): papkada tahlil qilingan xatni ko'rsatish uchun
 POST /confirm  — {blank_id, nom}: xodim tasdiqlagan jo'natuvchi xotiraga yoziladi
 Sana: qo'lyozma sana OCR'lari (engine/date_ocr, SANA_OCR); kirish_sana — sana oynasi uchun.
 
@@ -30,7 +31,7 @@ from pydantic import BaseModel
 from src.engine.date_ocr import DateOcr, build_date_ocr
 from src.engine.feedback import FEEDBACK_FILE, confirm_sender
 from src.engine.model import MODEL_FILE, Model
-from src.engine.pipeline import current_model, process_pdf
+from src.engine.pipeline import MAX_PAGES, current_model, process_pdf
 from src.evaluation.evaluate import compare
 from src.fields.date_vote import to_day
 from src.reading.images import page_images
@@ -71,6 +72,16 @@ def create_app(
     yuklanadi). None qaytarsa — sana OCR'i o'chiq (testlarda tez)."""
     app = FastAPI(title="Xalqaro xatlar: rekvizitlar")
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
+
+    @app.middleware("http")
+    async def no_stale_page(request, call_next):
+        """Sahifa va JS/CSS: brauzer har safar yangisi bormi deb so'rasin (o'zgarmagan bo'lsa —
+        304). Aks holda ilova yangilanganda brauzer eski kodni keshdan ishlatib qoladi."""
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
     models: list[Model] = []  # model bir marta yuklanadi; tasdiqdan keyin qayta yuklanadi
     blanks: OrderedDict[str, str] = OrderedDict()
     date_engines: list[DateOcr | None] = []  # bir marta quriladi
@@ -132,6 +143,14 @@ def create_app(
         if expected is not None:
             answer["solishtirish"] = compare(result.answer, expected)
         return answer
+
+    @app.post("/pages")
+    def pages(pdf: Annotated[UploadFile, File()]) -> dict:
+        """Faqat sahifalar rasmi (OCR'siz, tez): papkada tahlil qilingan xatni ko'rsatish uchun."""
+        try:
+            return {"rasmlar": page_images(pdf.file.read(), MAX_PAGES)}
+        except (pymupdf.FileDataError, ValueError) as e:
+            raise HTTPException(400, f"PDF o'qilmadi: {e}") from e
 
     @app.post("/confirm")
     def confirm(body: Confirmation) -> dict:

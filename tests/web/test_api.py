@@ -103,6 +103,9 @@ def test_page_and_static_files_are_served(client):
     assert '<script type="module" src="/static/js/main.js"' in page.text
     for name in ("js/main.js", "js/single.js", "js/batch.js", "style.css"):
         assert client.get(f"/static/{name}").status_code == 200
+    # ilova yangilanganda brauzer eski kodni keshdan ishlatmasin
+    assert page.headers["cache-control"] == "no-cache"
+    assert client.get("/static/js/main.js").headers["cache-control"] == "no-cache"
     # sahifa internetdan hech narsa yuklamaydi
     assert "http://" not in page.text and "https://" not in page.text
 
@@ -138,3 +141,10 @@ def test_received_date_sources():
     assert received_date("09.01.2026", truth) == date(2026, 1, 9)  # so'rovdagisi ustun
     assert received_date(None, truth) == date(2026, 1, 5)
     assert received_date(None, None) == date.today()
+
+
+def test_pages_without_ocr(client, letter_pdf):
+    files = {"pdf": ("xat.pdf", letter_pdf.read_bytes(), "application/pdf")}
+    body = client.post("/pages", files=files).json()
+    assert len(body["rasmlar"]) == 2 and body["rasmlar"][0].startswith("data:image/jpeg;base64,")
+    assert client.post("/pages", files={"pdf": ("x.pdf", b"bu pdf emas")}).status_code == 400

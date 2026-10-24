@@ -1,6 +1,6 @@
 // Bitta xat: PDF yuklanadi, AI javobi maydonlarda, har qiymat joyi PDF ustida ramkada.
 
-import { confirmSender, extract } from "./api.js";
+import { confirmSender, extract, pageImages } from "./api.js";
 import { $, el } from "./dom.js";
 import { FIELDS, REKVIZIT, isFlagged, suggestionsOf, valueOf } from "./fields.js";
 
@@ -32,6 +32,21 @@ export async function showLetter(pdf, truth = null) {
   } finally {
     clearInterval(timer);
     $("run").disabled = false;
+  }
+}
+
+/** Papkada tahlil qilingan xatni ko'rsatadi — qayta tahlil qilinmaydi, faqat sahifa rasmlari olinadi
+ * (OCR'siz, tez); ko'rsatilgan qiymatlar jadvaldagi qator bilan aynan bir xil. */
+export async function showAnswer(ready, pdf, truth = null) {
+  setFiles("pdf", pdf);
+  setFiles("truth", truth);
+  setStatus("Sahifalar tayyorlanyapti…");
+  try {
+    answer = { ...ready, rasmlar: ready.rasmlar || (await pageImages(pdf)).rasmlar };
+    render();
+    setStatus(`Papkadagi natija (qayta o'qilmadi; tahlil ${answer.vaqt.jami} s olgan edi)`);
+  } catch (error) {
+    setStatus(error.message, true);
   }
 }
 

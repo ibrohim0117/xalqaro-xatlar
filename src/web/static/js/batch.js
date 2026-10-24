@@ -5,7 +5,7 @@
 import { extract } from "./api.js";
 import { $, el } from "./dom.js";
 import { FIELDS, isFlagged, valueOf } from "./fields.js";
-import { showLetter } from "./single.js";
+import { showAnswer, showLetter } from "./single.js";
 
 let letters = []; // {name, pdf, truth}
 let rows = []; // {letter, answer} yoki {letter, error}
@@ -126,7 +126,9 @@ function tableRow({ letter, answer, error }, number) {
   const open = el("button", { type: "button", className: "secondary small" }, "Ko'rish");
   open.addEventListener("click", () => {
     openSingle();
-    showLetter(letter.pdf, letter.truth);
+    // tahlil qilingan bo'lsa — tayyor natija (bir zumda); xato bilan tugagan bo'lsa — qayta tahlil
+    if (answer) showAnswer(answer, letter.pdf, letter.truth);
+    else showLetter(letter.pdf, letter.truth);
   });
   const cells = [el("td", {}, number), el("td", { className: "name" }, letter.name)];
   if (error) {
