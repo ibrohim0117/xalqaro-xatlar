@@ -31,6 +31,12 @@ def structure(number: str) -> str:
     )
 
 
+def shape(number: str) -> str:
+    """To'liq shakl — har raqam 9, harf A ("17/08-10/2934" -> "99/99-99/9999"): tuzilishdan
+    aniqroq (guruh uzunligi ham), qiymatni esa ko'rsatmaydi."""
+    return "".join("9" if c.isdigit() else c if c in SEPARATORS else "A" for c in key(number))
+
+
 def skeleton(shape: str) -> str:
     """Tuzilish, ajratgich turisiz ("9/9-9/9" -> "9|9|9|9")."""
     return re.sub(r"[/\-._\\]", "|", shape)

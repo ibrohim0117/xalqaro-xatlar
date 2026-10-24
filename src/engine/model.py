@@ -1,7 +1,8 @@
 """Model — dev xatlardan o'rganilgan qiymatlar: har hudud (va notariat) uchun boshqarmaning to'liq
 nomi, eng ko'p uchraydigan qisqacha mazmun va jo'natuvchini topish uchun dev xatlari blankining
 so'zlari (blankda fuqaro ismi yo'q; telefon va raqamlar saqlanmaydi) hamda jo'natuvchi nomlari,
-har jo'natuvchining raqam qolipi (B5.5: tuzilish va doimiy bosh qism "54/07-", tartib raqamisiz).
+har jo'natuvchining raqam qolipi (B5.5: tuzilish va doimiy bosh qism "54/07-", tartib raqamisiz),
+bizning raqamlarimiz shakllari (B5.6: javob xatlarni tanish uchun, "99/99-9/9999" — qiymat emas).
 U outputs/model.json da (gitignore'da) saqlanadi: nomlarni Claude ko'rmaydi.
 """
 
@@ -11,8 +12,9 @@ from pathlib import Path
 
 from src.common.schema import expected_boshqarma, group_of
 from src.common.text import most_common, normalize
-from src.fields.number_template import Template, learn
+from src.fields.number_template import Template, learn, shape
 from src.fields.regions import REGIONS, region_of_boshqarma
+from src.fields.reply import parse_reply_summary
 from src.fields.sender import blank_words
 
 MODEL_FILE = Path("outputs/model.json")
@@ -32,6 +34,7 @@ class Model:
     sender_names: list[str] = field(default_factory=list)  # ularning jo'natuvchilari
     # jo'natuvchi (normalize) -> raqam qolipi {"structure": "9/9-9/9", "prefix": "54/07-"}
     number_templates: dict[str, dict] = field(default_factory=dict)
+    reply_shapes: list[str] = field(default_factory=list)  # bizning raqamlar shakli (javob xatlar)
 
 
 def sender_part(blanks: list[str], truths: list[dict]) -> tuple[list[str], list[str]]:
@@ -51,6 +54,13 @@ def number_part(truths: list[dict]) -> dict[str, dict]:
             by_sender.setdefault(normalize(sender), []).append(number)
     learned = {sender: learn(numbers) for sender, numbers in by_sender.items()}
     return {sender: asdict(template) for sender, template in learned.items() if template}
+
+
+def reply_part(truths: list[dict]) -> list[str]:
+    """Javob xatlar mazmunidagi (bizning oldingi xatimiz) raqamlarning shakllari."""
+    docs = [t.get("rekvizit_document") or {} for t in truths]
+    summaries = [doc.get("hujjatning_qisqacha_mazmuni") for doc in docs]
+    return sorted({shape(found[1]) for s in summaries if (found := parse_reply_summary(s))})
 
 
 def number_template(model: Model, sender: str | None) -> Template | None:
@@ -78,6 +88,7 @@ def learn_model(truths: list[dict], blanks: list[str] | None = None) -> Model:
         sender_texts,
         sender_names,
         number_part(truths),
+        reply_part(truths),
     )
 
 

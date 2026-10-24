@@ -8,10 +8,13 @@ from src.common.schema import REKVIZIT_FIELDS
 from src.engine.model import Model, template_name
 from src.fields.boshqarma import predict_group
 from src.fields.date_number import date_number_answer
+from src.fields.reply import our_reference, own_numbers, reply_summary
 from src.fields.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text
 from src.fields.sender_variants import page_variants
 from src.fields.signer import find_signer
 from src.reading.pages import CachedPage
+
+REPLY_PAGES = 6  # javob xat havolasi shu sahifalardan qidiriladi (pipeline.MAX_PAGES bilan bir xil)
 
 
 def predict(pages: list[CachedPage], model: Model) -> dict:
@@ -31,6 +34,10 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         flags.append("boshqarma")
     rekvizit = dict.fromkeys(REKVIZIT_FIELDS)
     rekvizit["hujjatning_qisqacha_mazmuni"] = model.summary
+    # B5.6: javob xat — matnda bizning oldingi xatimiz raqami (vazirlik shaklida) va sanasi bor
+    shapes = set(model.reply_shapes)
+    if reference := our_reference(pages[:REPLY_PAGES], own_numbers(pages[0]), shapes):
+        rekvizit["hujjatning_qisqacha_mazmuni"] = reply_summary(*reference)
     suggestions: dict = {}  # AI o'qigan/tarjima qilgan, lekin maydonga yozilmagan qiymatlar
     sender, score = (
         Matcher(model.sender_texts, model.sender_names).best(header_text(pages, SENDER_MODE))

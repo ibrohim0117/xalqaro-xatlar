@@ -177,3 +177,14 @@ def test_ocr_only_date_is_a_suggestion():
     assert answer["rekvizit_document"]["hujjat_sana"] is None
     assert answer["takliflar"] == {"hujjat_sana": "05.12.2025"}
     assert "hujjat_sana" in answer["tekshirish_kerak"]
+
+
+def test_reply_letter_gets_reply_summary():
+    reply = truth(FARGONA, summary="05.06.2025-yildagi 17/08-1/2934-son xat ijrosi bo'yicha")
+    model = learn_model([reply, truth(FARGONA), truth(FARGONA)])
+    assert model.reply_shapes == ["99/99-9/9999"]  # qiymat emas — shakl
+    text = "на письмо Министерства юстиции Узбекистан от 01.09.2025 № 17/08-1/3001 сообщаем"
+    summary = predict(pages_of(text), model)["rekvizit_document"]["hujjatning_qisqacha_mazmuni"]
+    assert summary == "01.09.2025-yildagi 17/08-1/3001-son xat ijrosi bo'yicha"
+    plain = predict(pages_of("Просим вручить документы"), model)["rekvizit_document"]
+    assert plain["hujjatning_qisqacha_mazmuni"] == "Standart mazmun"

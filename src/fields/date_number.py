@@ -102,16 +102,21 @@ def parse_date(text: str, skip_after_ot: bool = False, patterns=DATE_PATTERNS) -
     return None
 
 
-def all_dates(text: str, patterns=DATE_PATTERNS) -> list[tuple[str, bool]]:
-    """Matndagi BARCHA sanalar, matndagi tartibida: (sana, oldida "от" bormi)."""
+def date_spans(text: str, patterns=DATE_PATTERNS) -> list[tuple[int, int, str, bool]]:
+    """Matndagi BARCHA sanalar joyi bilan, tartibda: (boshi, oxiri, sana, oldida "от" bormi)."""
     low = text.lower()
     found = []
     for pattern, parts in patterns:
         for m in pattern.finditer(low):
             day, month, year = parts(m)
             if month and (date := make_date(day, month, year)):
-                found.append((m.start(), date, after_ot(low, m.start())))
-    return [(date, ot) for _, date, ot in sorted(found)]
+                found.append((m.start(), m.end(), date, after_ot(low, m.start())))
+    return sorted(found)
+
+
+def all_dates(text: str, patterns=DATE_PATTERNS) -> list[tuple[str, bool]]:
+    """Matndagi BARCHA sanalar, matndagi tartibida: (sana, oldida "от" bormi)."""
+    return [(date, ot) for _, _, date, ot in date_spans(text, patterns)]
 
 
 def is_date_token(token: str) -> bool:
