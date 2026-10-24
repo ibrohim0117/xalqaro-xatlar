@@ -17,4 +17,4 @@ exec .venv-vlm/bin/python -m mlx_vlm.server \
     --model models/vlm/Qwen3.5-2B-4bit \
     --host 127.0.0.1 \
     --port "${VLM_PORT:-8090}" \
-    --log-level warning  # har 10 tokendagi INFO yozuvlari chiqmasin
+    --log-level WARNING  # har 10 tokendagi INFO yozuvlari chiqmasin
