@@ -23,6 +23,8 @@ MONTHS = {
     "сен": 9, "окт": 10, "ноя": 11, "дек": 12,
     "yan": 1, "fev": 2, "apr": 4, "iyun": 6, "iyul": 7, "avg": 8, "sen": 9, "okt": 10, "noy": 11,
     "dek": 12,
+    "jan": 1, "feb": 2, "mar": 3, "may": 5, "jun": 6, "jul": 7, "aug": 8, "sep": 9, "oct": 10,
+    "nov": 11, "dec": 12,  # inglizcha (sertifikatlar: "23.Oct.2025")
 }  # fmt: skip
 DMY = re.compile(r"(?<!\d)(\d{1,2})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{4}|\d{2})(?!\d)")
 YMD = re.compile(r"(?<!\d)(\d{4})\s*[./-]\s*(\d{1,2})\s*[./-]\s*(\d{1,2})(?!\d)")
@@ -65,10 +67,32 @@ DATE_PATTERNS = [
 ]
 
 
-def parse_date(text: str, skip_after_ot: bool = False) -> str | None:
-    """Matndagi birinchi sana: 05.12.2025, 19.12.25, 05 ДЕК 2025, 2025 / 12 /22."""
+# OCR bo'laklari matni uchun qo'shimcha shakllar (B5.3c, Ibrohim qo'lda ko'rgan xatlardan). Matn
+# qatlamidagi avtomatik sana qoidasiga (13/13) TEGILMAYDI: bo'shliqli shakllar telefon yoki manzilni
+# sana deb olishi mumkin — shuning uchun faqat sana kutilgan bo'laklarga (date, line, header, page).
+# « 17 » 12 20 25 ý. (Turkmaniston)
+TURKMEN = re.compile(r"«\s*(\d{1,2})\s*»[\s._]*(\d{1,2})[\s._]+(20\s?\d{2}|\d{2})(?!\d)")
+# 12.11 20 25 г. (yil ikkiga bo'lingan)
+SPLIT_YEAR = re.compile(r"(?<!\d)(\d{1,2})\s*[./-]\s*(\d{1,2})\s*[./-]?\s*20\s+(\d{2})(?!\d)")
+# 23.Oct.2025 (oy nomi nuqtalar bilan)
+D_MON_Y_LOOSE = re.compile(
+    r"(?<!\d)(\d{1,2})[\s.\-«»\"']*([а-яёa-z]{3,})[\s.,\-]*(\d{4}|\d{2})(?!\d)"
+)
+# 19 12.25 (kun va oy orasida bo'shliq)
+SPACED = re.compile(r"(?<!\d)(\d{1,2})\s+(\d{1,2})\s*[./-]\s*(\d{4}|\d{2})(?!\d)")
+OCR_PATTERNS = DATE_PATTERNS + [
+    (TURKMEN, lambda m: (int(m[1]), int(m[2]), int(m[3].replace(" ", "")))),
+    (SPLIT_YEAR, lambda m: (int(m[1]), int(m[2]), 2000 + int(m[3]))),
+    (D_MON_Y_LOOSE, lambda m: (int(m[1]), month_of(m[2]), int(m[3]))),
+    (SPACED, lambda m: (int(m[1]), int(m[2]), int(m[3]))),
+]
+
+
+def parse_date(text: str, skip_after_ot: bool = False, patterns=DATE_PATTERNS) -> str | None:
+    """Matndagi birinchi sana: 05.12.2025, 19.12.25, 05 ДЕК 2025, 2025 / 12 /22.
+    patterns=OCR_PATTERNS — OCR bo'lagi matni uchun (qo'shimcha shakllar bilan)."""
     low = text.lower()
-    for pattern, parts in DATE_PATTERNS:
+    for pattern, parts in patterns:
         for m in pattern.finditer(low):
             if skip_after_ot and after_ot(low, m.start()):
                 continue
@@ -78,11 +102,11 @@ def parse_date(text: str, skip_after_ot: bool = False) -> str | None:
     return None
 
 
-def all_dates(text: str) -> list[tuple[str, bool]]:
+def all_dates(text: str, patterns=DATE_PATTERNS) -> list[tuple[str, bool]]:
     """Matndagi BARCHA sanalar, matndagi tartibida: (sana, oldida "от" bormi)."""
     low = text.lower()
     found = []
-    for pattern, parts in DATE_PATTERNS:
+    for pattern, parts in patterns:
         for m in pattern.finditer(low):
             day, month, year = parts(m)
             if month and (date := make_date(day, month, year)):

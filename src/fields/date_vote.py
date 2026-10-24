@@ -13,30 +13,30 @@ import re
 from collections import Counter
 from datetime import date as Date
 
-from src.fields.date_number import all_dates, parse_date
+from src.fields.date_number import OCR_PATTERNS, all_dates, parse_date
 
 ANCHOR_TOKEN = re.compile(r"№|\bN[oо°º]?\b", re.IGNORECASE)  # OCR: "№", "No", "N", "N°"
 STRONG = ("date", "header_anchor")  # ishonchli bo'laklar
 WINDOW_DAYS = 365  # dev: kirish_sana - hujjat_sana = 9..97 kun; zaxira bilan
 
 
-def header_anchor_date(text: str) -> str | None:
+def header_anchor_date(text: str, patterns=OCR_PATTERNS) -> str | None:
     """header matnida "№" (No/N) bor qatordagi sana — "от" dan keyingisi emas."""
     for line in text.splitlines():
-        date = next((d for d, ot in all_dates(line) if not ot), None)
+        date = next((d for d, ot in all_dates(line, patterns) if not ot), None)
         if date and ANCHOR_TOKEN.search(line):
             return date
     return None
 
 
-def engine_dates(texts: dict[str, str]) -> dict[str, str | None]:
-    """Bitta OCR'ning bo'laklaridan sana nomzodlari."""
+def engine_dates(texts: dict[str, str], patterns=OCR_PATTERNS) -> dict[str, str | None]:
+    """Bitta OCR'ning bo'laklaridan sana nomzodlari (patterns — o'lchovda solishtirish uchun)."""
     header = texts.get("header", "")
     return {
-        "date": parse_date(texts.get("date", "")),
-        "line": parse_date(texts.get("line", ""), skip_after_ot=True),
-        "header_anchor": header_anchor_date(header),
-        "header_first": next((d for d, ot in all_dates(header) if not ot), None),
+        "date": parse_date(texts.get("date", ""), patterns=patterns),
+        "line": parse_date(texts.get("line", ""), skip_after_ot=True, patterns=patterns),
+        "header_anchor": header_anchor_date(header, patterns),
+        "header_first": next((d for d, ot in all_dates(header, patterns) if not ot), None),
     }
 
 

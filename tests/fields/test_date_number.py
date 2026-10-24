@@ -3,6 +3,7 @@
 import pytest
 
 from src.fields.date_number import (
+    OCR_PATTERNS,
     all_dates,
     date_and_number,
     is_date_token,
@@ -132,3 +133,38 @@ def test_parse_number_from_ocr_text(text, expected):
 def test_all_dates_in_order_with_ot_mark():
     text = "05.12.2025 № 54/07 На № 17/08 от 01.10.2025. Справка от 3 мая 2024 г."
     assert all_dates(text) == [("05.12.2025", False), ("01.10.2025", True), ("03.05.2024", True)]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("« 17 » 12 20 25 ý.", "17.12.2025"),  # Turkmaniston blanki
+        ("«17» 12 2025 ý.", "17.12.2025"),
+        ("19 12.25 nr. 02-1793", "19.12.2025"),  # Moldova: kun va oy orasida bo'shliq
+        ("on the(date) 23.Oct.2025", "23.10.2025"),  # inglizcha oy, nuqtalar bilan
+        ("от 12.11 20 25 г. № 1495", "12.11.2025"),  # yil ikkiga bo'lingan
+        ("05.12.2025 № 54/07", "05.12.2025"),  # oddiy shakl ham ishlaydi
+    ],
+)
+def test_ocr_date_shapes(text, expected):
+    assert parse_date(text, patterns=OCR_PATTERNS) == expected
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["« 17 » 12 20 25 ý.", "19 12.25 nr. 02-1793", "on the(date) 23.Oct.2025"],
+)
+def test_text_layer_rule_is_unchanged(text):
+    assert parse_date(text) is None  # avtomatik (matn qatlami) qoidasi yangi shakllarni olmaydi
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "tel. +373 22 26 72 93, fax: +373 29 26 92",  # telefon — sana emas
+        "Telefon: (+993 12) 39-19-21; Faks: (+993 12) 39-19-71",
+        "md-2012, str. Aleksandr Pushkin, nr.42",
+    ],
+)
+def test_ocr_shapes_do_not_read_phones_as_dates(text):
+    assert parse_date(text, patterns=OCR_PATTERNS) is None

@@ -23,7 +23,13 @@ from pathlib import Path
 from src.common.text import normalize
 from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
-from src.fields.date_number import all_dates, date_and_number, parse_date, parse_number
+from src.fields.date_number import (
+    OCR_PATTERNS,
+    all_dates,
+    date_and_number,
+    parse_date,
+    parse_number,
+)
 from src.reading.engines import READERS, make_reader
 
 CROPS_DIR = Path("outputs/crops")
@@ -45,11 +51,13 @@ def same(value: str | None, expected: str | None) -> bool:
 
 def answers(texts: dict[str, str], text_layer_date: str | None) -> dict[str, str | None]:
     """Bo'laklardan o'qilgan matn -> har qator uchun qiymat."""
-    date_crop = parse_date(texts.get("date", ""))
-    header = next((d for d, ot in all_dates(texts.get("header", "")) if not ot), None)
+    date_crop = parse_date(texts.get("date", ""), patterns=OCR_PATTERNS)
+    header = next((d for d, ot in all_dates(texts.get("header", ""), OCR_PATTERNS) if not ot), None)
     return {
         "sana: date bo'lagi": date_crop,
-        "sana: line bo'lagi": parse_date(texts.get("line", ""), skip_after_ot=True),
+        "sana: line bo'lagi": parse_date(
+            texts.get("line", ""), skip_after_ot=True, patterns=OCR_PATTERNS
+        ),
         "sana: yangi qoida": text_layer_date or date_crop,
         "sana: header bo'lagi": header,
         "sana: yangi qoida + header": text_layer_date or date_crop or header,

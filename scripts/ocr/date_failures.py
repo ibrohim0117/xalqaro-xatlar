@@ -17,7 +17,7 @@ from scripts.ocr.compare_ocr import OUT_DIR
 from scripts.ocr.explain_dates import relation
 from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
-from src.fields.date_number import date_and_number
+from src.fields.date_number import DATE_PATTERNS, OCR_PATTERNS, date_and_number
 from src.fields.date_vote import (
     WINDOW_DAYS,
     confirmed,
@@ -33,11 +33,13 @@ CROPS = ("date", "line", "header")
 OUTCOMES = ("yozildi to'g'ri", "yozildi xato", "faqat takliflarda", "topilmadi")
 
 
-def outcome(texts: list[dict[str, str]], text_layer: str | None, truth: str, received) -> str:
+def outcome(
+    texts: list[dict[str, str]], text_layer: str | None, truth: str, received, patterns=OCR_PATTERNS
+) -> str:
     """Prototip qoidasi bilan bu xatda sana qaysi holatga tushadi."""
     if in_window(text_layer, received, WINDOW_DAYS):
         return "yozildi to'g'ri" if text_layer == truth else "yozildi xato"
-    found = [windowed(engine_dates(t), received) for t in texts]
+    found = [windowed(engine_dates(t, patterns), received) for t in texts]
     if prefill := confirmed(found):
         return "yozildi to'g'ri" if prefill == truth else "yozildi xato"
     return (
@@ -50,9 +52,11 @@ def outcome(texts: list[dict[str, str]], text_layer: str | None, truth: str, rec
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ids", action="store_true", help="topilmagan xatlarning DOC raqamlari")
+    parser.add_argument("--diff", action="store_true", help="eski (qat'iy) shakllar bilan farqi")
     args = parser.parse_args()
     letters = {letter.doc_id: letter for letter in list_letters()}
     missing = defaultdict(list)  # (VLM header'da nima, "№" bormi) -> DOC raqamlari
+    changed = []  # --diff: natijasi o'zgargan xatlar
     dev = sorted(load_split()["dev"])
     saved = {r: json.loads((OUT_DIR / f"{r}.json").read_text(encoding="utf-8")) for r in READERS}
     cases, anchors, vlm = Counter(), Counter(), Counter()
@@ -64,6 +68,9 @@ def main() -> None:
         text_layer = date_and_number(first.text_layer)[0]
         case = outcome(texts, text_layer, truth, received)
         cases[case] += 1
+        old = outcome(texts, text_layer, truth, received, DATE_PATTERNS)
+        if args.diff and old != case:
+            changed.append(f"{doc_id}: {old} -> {case}")
         if case.startswith("yozildi"):
             continue
         has_anchor = "line" in texts[0]  # bo'laklar "№" langari topilganda kesilgan (make_crops)
@@ -92,6 +99,10 @@ def main() -> None:
         print("\n  Topilmagan xatlar (VLM header'da nima ko'rgan, \"№\" qatori):")
         for (header, anchor), docs in sorted(missing.items()):
             print(f"    {header}, {anchor} ({len(docs)}): {', '.join(docs)}")
+    if args.diff:
+        print("\n  Yangi sana shakllari bilan natijasi o'zgargan xatlar:")
+        for line in changed or ["—"]:
+            print(f"    {line}")
 
 
 if __name__ == "__main__":

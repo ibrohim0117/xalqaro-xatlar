@@ -15,7 +15,7 @@ import json
 
 from scripts.ocr.compare_ocr import OUT_DIR
 from src.evaluation.dataset import list_letters, load_truth
-from src.fields.date_number import all_dates
+from src.fields.date_number import OCR_PATTERNS, all_dates
 
 CROPS = ("date", "line", "header")
 PARTS = ("kun", "oy", "yil")
@@ -23,7 +23,7 @@ PARTS = ("kun", "oy", "yil")
 
 def relation(text: str, truth: str) -> str:
     """OCR matnidagi sanalar to'g'ri sanaga nisbatan qanday."""
-    dates = all_dates(text)
+    dates = all_dates(text, OCR_PATTERNS)
     if not dates:
         return "sana o'qilmadi"
     if any(date == truth for date, _ in dates):
