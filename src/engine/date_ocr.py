@@ -50,6 +50,8 @@ class DateReading:
     suggestions: list[str] = field(default_factory=list)  # 3 tagacha taklif
     seconds: float = 0.0  # OCR'ga ketgan vaqt
     readers: list[str] = field(default_factory=list)  # ishlagan OCR'lar
+    # OCR -> bo'lak -> o'qilgan matn (raqam ham shundan olinadi — qayta OCR'siz)
+    texts: dict[str, dict[str, str]] = field(default_factory=dict)
 
 
 def crops_for(reader: str) -> tuple[str, ...]:
@@ -73,7 +75,7 @@ class DateOcr:
             for name, box in regions.items()
             if name in wanted
         }
-        found, worked = [], []
+        found, worked, read = [], [], {}
         for reader in self.readers:
             # bitta OCR ishlamasa (masalan, VLM serveri o'chiq) — chetlanadi, qolganlari davom etadi
             try:
@@ -87,9 +89,11 @@ class DateOcr:
                 continue
             found.append(windowed(engine_dates(texts), received))
             worked.append(reader.name)
+            read[reader.name] = texts
         prefill = prefill_date(found, worked[0] if worked else None)
         suggestions = ranked([{d for d in f.values() if d} for f in found])
-        return DateReading(None, prefill, suggestions, time.perf_counter() - start, worked)
+        seconds = time.perf_counter() - start
+        return DateReading(None, prefill, suggestions, seconds, worked, read)
 
 
 def build_date_ocr(names: str | None = None) -> DateOcr | None:

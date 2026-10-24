@@ -6,7 +6,12 @@ Har OCR uchun (make_crops yasagan bo'laklar, faqat dev):
 - "yangi qoida" — hozirgi tizim (matn qatlamidan sana avtomatik) + bo'sh qolgan joyga bo'lak OCR'i.
 Hisob 70 xatga nisbatan (bo'lagi yo'q xat — javob yo'q). Javob: OCR biror qiymat chiqardi;
 to'g'ri: json bilan mos (bo'shliqsiz solishtiriladi). Vaqt — bitta bo'lakka (median).
-O'qilgan matnlar outputs/ocr/<OCR>.json ga yoziladi (keyingi tahlil uchun; Claude OCHMAYDI).
+O'qilgan matnlar outputs/ocr/<OCR>.json ga QO'SHILADI (keyingi tahlil uchun; Claude OCHMAYDI):
+oldin o'qilgan boshqa bo'laklar saqlanib qoladi, shu safar o'qilgan bo'lak — yangisi bilan.
+Raqam — fields/number_vote.read_number (VLM JSON'i "raqam" maydoni, ko'p qatorlida "№" qatori).
+Matnlar har xatdan keyin yoziladi (Mac qulasa ham o'qilgani qoladi). --ids — faqat shu xatlar
+(sinov uchun); --saved — OCR ishlatilmaydi, oldin saqlangan matnlar baholanadi (bir xil xatlarda
+ikki OCR'ni solishtirish uchun, masalan 2B va 4B).
 Ekranga FAQAT sonlar chiqadi.
 
 Ishga tushirish (OCR nomlari — src/reading/engines READERS):
@@ -23,13 +28,8 @@ from pathlib import Path
 from src.common.text import normalize
 from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
-from src.fields.date_number import (
-    OCR_PATTERNS,
-    all_dates,
-    date_and_number,
-    parse_date,
-    parse_number,
-)
+from src.fields.date_number import OCR_PATTERNS, all_dates, date_and_number, parse_date
+from src.fields.number_vote import read_number
 from src.reading.engines import READERS, make_reader
 
 CROPS_DIR = Path("outputs/crops")
@@ -67,10 +67,10 @@ def answers(texts: dict[str, str], text_layer_date: str | None) -> dict[str, str
         "sana: page (butun sahifa)": parse_date(
             texts.get("page", ""), skip_after_ot=True, patterns=OCR_PATTERNS
         ),
-        "raqam: number bo'lagi": parse_number(texts.get("number", "")),
-        "raqam: header bo'lagi": parse_number(texts.get("header", "")),
-        "raqam: page (butun sahifa)": parse_number(texts.get("page", "")),
-        "raqam: line bo'lagi": parse_number(texts.get("line", "")),
+        "raqam: number bo'lagi": read_number("number", texts.get("number", "")),
+        "raqam: header bo'lagi": read_number("header", texts.get("header", "")),
+        "raqam: page (butun sahifa)": read_number("page", texts.get("page", "")),
+        "raqam: line bo'lagi": read_number("line", texts.get("line", "")),
     }
 
 
@@ -83,10 +83,14 @@ def main() -> None:
         default=["date", "number", "line", "header"],
         help="o'qiladigan bo'laklar",
     )
+    parser.add_argument("--ids", nargs="+", help="faqat shu xatlar (DOC_…)")
+    parser.add_argument("--saved", action="store_true", help="OCR'siz — saqlangan matnlardan")
     args = parser.parse_args()
 
     letters = {letter.doc_id: letter for letter in list_letters()}
     dev = sorted(load_split()["dev"])
+    if args.ids:
+        dev = [d for d in dev if d in set(args.ids)]
     truths = {d: load_truth(letters[d]).get("rekvizit_document") or {} for d in dev}
     expected = {
         d: {"sana": t.get("hujjat_sana"), "raqam": t.get("hujjat_raqami")}
@@ -102,28 +106,33 @@ def main() -> None:
     print(f"B5.3b-2: OCR bo'laklarda, dev {n} xat ('sana № raqam' bo'lagi bor: {with_crops})")
     print(f"  hozirgi tizim: sana {now}/{n} (matn qatlamidan), raqam 0/{n} (faqat taklif)\n")
     for name in args.readers:
-        reader = make_reader(name)
+        out = OUT_DIR / f"{name}.json"
+        saved = json.loads(out.read_text(encoding="utf-8")) if out.exists() else {}
+        reader = None if args.saved else make_reader(name)
         if hasattr(reader, "available") and not reader.available():
             print(f"  {name}: VLM serveri javob bermadi — avval alohida terminalda:")
             print("    sh scripts/ocr/vlm_server.sh\n")
             continue
-        stats, times, read = Counter(), [], {}
+        stats, times = Counter(), []
         for number, doc_id in enumerate(dev, 1):
             print(f"\r  {name}: {number}/{n} xat o'qilyapti…", end="", flush=True)
-            folder = CROPS_DIR / doc_id
-            texts = {}
-            for crop in args.crops:
-                path = folder / f"{crop}.png"
-                if path.exists():
-                    start = time.perf_counter()
-                    texts[crop] = reader.read(path.read_bytes())
-                    times.append(time.perf_counter() - start)
-            read[doc_id] = texts
+            if reader is None:  # --saved: faqat oldin o'qilgan bo'laklar
+                old = saved.get(doc_id, {})
+                texts = {crop: old[crop] for crop in args.crops if crop in old}
+            else:
+                texts = {}
+                for crop in args.crops:
+                    path = CROPS_DIR / doc_id / f"{crop}.png"
+                    if path.exists():
+                        start = time.perf_counter()
+                        texts[crop] = reader.read(path.read_bytes())
+                        times.append(time.perf_counter() - start)
+                saved.setdefault(doc_id, {}).update(texts)
+                out.write_text(json.dumps(saved, ensure_ascii=False, indent=1), encoding="utf-8")
             for row, value in answers(texts, text_layer_dates[doc_id]).items():
                 if value:
                     stats[row, "javob"] += 1
                     stats[row, "to'g'ri"] += same(value, expected[doc_id][dict(ROWS)[row]])
-        (OUT_DIR / f"{name}.json").write_text(json.dumps(read, ensure_ascii=False, indent=1))
 
         median = statistics.median(times) * 1000 if times else 0
         print(f"\r  {name}  (bitta bo'lak: {median:.0f} ms){' ' * 20}")

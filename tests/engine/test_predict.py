@@ -1,8 +1,16 @@
 """src/engine/predict.py testlari — soxta json'lar va to'qilgan nomlar bilan."""
 
-from src.engine.model import Model, learn_model, load_model, save_model, template_matches
+from src.engine.model import (
+    Model,
+    learn_model,
+    load_model,
+    number_template,
+    save_model,
+    template_matches,
+)
 from src.engine.predict import predict
 from src.evaluation.evaluate import field_values
+from src.fields.number_template import Template
 from src.reading.pages import CachedPage
 from src.reading.pdf_text import PageText, Word
 
@@ -66,6 +74,16 @@ def test_answer_is_readable_by_evaluate():
     values = field_values(answer, truth(FARGONA))
     assert values["boshqarma"] == (FARGONA, FARGONA)
     assert values["hujjatning_qisqacha_mazmuni"] == ("Standart mazmun", "Standart mazmun")
+
+
+def test_model_learns_number_template_per_sender():
+    numbered = [truth(FARGONA, sender="Rossiya"), truth(FARGONA, sender="rossiya ")]
+    numbered[0]["rekvizit_document"]["hujjat_raqami"] = "54/07-17001/25"
+    numbered[1]["rekvizit_document"]["hujjat_raqami"] = "54/07-9912/25"
+    model = learn_model([*numbered, truth(NOTARIAT, sender="Belarus")])
+    assert number_template(model, "Rossiya") == Template("9/9-9/9", "54/07-")
+    assert number_template(model, "Belarus") is None  # bitta xatdan qolip o'rganilmaydi
+    assert number_template(model, None) is None
 
 
 def test_model_save_and_load(tmp_path):

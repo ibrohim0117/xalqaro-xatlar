@@ -82,6 +82,7 @@ def test_vlm_extract_reads_its_own_crops_and_needs_confirmation(letter):
     rapid = FakeReader("rapid", "12.03.2026 No 55")
     reading = DateOcr([extract, rapid]).read(*letter(NO_PRINTED_DATE), RECEIVED)
     assert extract.calls == 3  # header, page, line
+    assert set(reading.texts["vlm-extract"]) == {"header", "page", "line"}  # raqam uchun saqlanadi
     assert rapid.calls == 3  # date, line, header ("number" va "page" o'qilmaydi)
     assert reading.prefill == "12.03.2026"
     # header va page'da bir xil sana — o'zini o'zi tasdiqlash hisob emas: yozilmaydi, faqat taklif

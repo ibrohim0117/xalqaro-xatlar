@@ -21,7 +21,7 @@ def test_process_pdf_from_bytes(letter_pdf):
     ]
     assert rekvizit["imzolagan_shaxs"] == "A.B.Sidorov"
     assert rekvizit["hujjat_sana"] == "12.03.2026"
-    assert answer["takliflar"]["hujjat_raqami"] == "55/07-1234"
+    assert answer["takliflar"]["hujjat_raqami"] == ["55/07-1234"]  # ro'yxat (number_ocr)
     assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]  # modelda jo'natuvchi yo'q
     assert "УПРАВЛЕНИЕ ЮСТИЦИИ" in blank  # /confirm uchun blank
     assert "Просим" not in blank  # xat matni blankka kirmaydi

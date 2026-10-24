@@ -6,6 +6,7 @@ u baytlar ko'rinishida xotirada qayta ishlanadi, diskka yozilmaydi va keshga tus
 Model = dev xatlaridan o'rganilgan qiymatlar (outputs/model.json, run_predict yasaydi)
 + xodim tasdiqlagan jo'natuvchilar (outputs/feedback.jsonl).
 B5.3c: sana dvigateli (date_ocr) berilsa — qo'lyozma sana bo'laklardan o'qiladi.
+B5.5: raqam — o'sha bo'lak matnlaridan + matn qatlami + jo'natuvchining raqam qolipi (number_ocr).
 """
 
 import time
@@ -16,7 +17,8 @@ from pathlib import Path
 from src.engine.date_ocr import DateOcr, DateReading, apply_reading
 from src.engine.feedback import FEEDBACK_FILE, load_confirmed, with_confirmed
 from src.engine.locate import locate
-from src.engine.model import MODEL_FILE, Model, load_model
+from src.engine.model import MODEL_FILE, Model, load_model, number_template
+from src.engine.number_ocr import NumberReading, apply_number, read_number
 from src.engine.predict import predict
 from src.fields.sender import SENDER_MODE, header_text
 from src.reading.pages import OcrStats, extract_pages, open_pdf
@@ -33,6 +35,7 @@ class Result:
     ocr: OcrStats  # shundan OCR'ga ketgani
     boxes: dict[str, list[dict]]  # maydon -> qayerdan olingani (sahifa va to'rtburchak)
     date: DateReading | None = None  # sana dvigateli natijasi (ishlatilgan bo'lsa)
+    number: NumberReading | None = None  # raqam natijasi
 
 
 def current_model(model_file: Path = MODEL_FILE, feedback_file: Path = FEEDBACK_FILE) -> Model:
@@ -60,5 +63,8 @@ def process_pdf(
         with open_pdf(pdf) as doc:
             reading = date_ocr.read(doc[0], pages[0], received or Date.today())
         apply_reading(answer, reading)
+    sender = answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"]
+    number = read_number(pages[0], reading, number_template(model, sender))
+    apply_number(answer, number)
     seconds = time.perf_counter() - start
-    return Result(answer, blank, len(pages), seconds, stats, boxes, reading)
+    return Result(answer, blank, len(pages), seconds, stats, boxes, reading, number)

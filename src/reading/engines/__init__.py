@@ -30,6 +30,12 @@ READERS: dict[str, tuple[str, str, dict]] = {
         "VlmReader",
         {"mode": "extract", "max_side": 1600},
     ),
+    # sinov (B5.5-4): o'sha savol, 4B model — server: VLM_MODEL=models/vlm/Qwen3.5-4B-4bit
+    "vlm-extract-4b": (
+        "src.reading.engines.vlm",
+        "VlmReader",
+        {"mode": "extract", "max_side": 1600, "model": "models/vlm/Qwen3.5-4B-4bit"},
+    ),
     "tesseract-digits-block": (
         "src.reading.engines.tesseract",
         "TesseractReader",

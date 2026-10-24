@@ -15,7 +15,9 @@ import cv2
 import numpy as np
 
 VLM_URL = os.environ.get("VLM_URL", "http://127.0.0.1:8090/v1/chat/completions")
-MODEL = "models/vlm/Qwen3.5-2B-4bit"  # server yuklagan model (boshqa nom — serverda qayta yuklash)
+# Standart model. Server so'rovdagi model bilan ishlaydi: boshqasi so'ralsa — eskisini xotiradan
+# chiqarib, yangisini yuklaydi (ikkalasi birga emas) — bitta o'lchovda bitta model (VLM_MODEL).
+MODEL = "models/vlm/Qwen3.5-2B-4bit"
 LOCAL = ("http://127.0.0.1:", "http://localhost:")
 MAX_SIDE = 1280  # katta bo'lak (header) kichraytiriladi: kamroq vizual token — tezroq
 TRANSCRIBE = (
@@ -44,11 +46,13 @@ class VlmReader:
         mode: str = "transcribe",
         timeout: float = 300,
         max_side: int = MAX_SIDE,
+        model: str = MODEL,
     ):
         """mode: "transcribe" — matnni ko'chiradi; "extract" — xatning sanasi va raqami (JSON)."""
         if not url.startswith(LOCAL):
             raise ValueError(f"VLM faqat lokal manzilda bo'lishi kerak: {url}")
         self.url, self.prompt, self.timeout, self.max_side = url, PROMPTS[mode], timeout, max_side
+        self.model = model
 
     def available(self) -> bool:
         """Server javob beryaptimi (/health). Yoqilmagan bo'lsa — VLM chetlanadi."""
@@ -67,7 +71,7 @@ class VlmReader:
         encoded = base64.b64encode(cv2.imencode(".png", image)[1].tobytes()).decode()
         image_part = {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{encoded}"}}
         body = {
-            "model": MODEL,
+            "model": self.model,
             "messages": [
                 {"role": "user", "content": [image_part, {"type": "text", "text": self.prompt}]}
             ],

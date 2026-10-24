@@ -9,7 +9,7 @@ import cv2
 import numpy as np
 import pytest
 
-from src.reading.engines.vlm import MAX_SIDE, VlmReader
+from src.reading.engines.vlm import MAX_SIDE, MODEL, VlmReader
 
 
 @pytest.fixture
@@ -54,6 +54,14 @@ def test_request_shape_and_answer(fake_server):
 def test_only_local_server_is_allowed():
     with pytest.raises(ValueError):
         VlmReader("https://example.com/v1/chat/completions")
+
+
+def test_model_is_chosen_per_reader(fake_server):
+    url, received = fake_server
+    bigger = "models/vlm/Qwen3.5-4B-4bit"
+    VlmReader(url).read(png(100, 100))
+    VlmReader(url, model=bigger).read(png(100, 100))
+    assert [r["model"] for r in received] == [MODEL, bigger]
 
 
 def test_extract_mode_asks_for_json(fake_server):

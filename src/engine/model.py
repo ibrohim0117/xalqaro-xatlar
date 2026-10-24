@@ -1,6 +1,7 @@
 """Model — dev xatlardan o'rganilgan qiymatlar: har hudud (va notariat) uchun boshqarmaning to'liq
 nomi, eng ko'p uchraydigan qisqacha mazmun va jo'natuvchini topish uchun dev xatlari blankining
-so'zlari (blankda fuqaro ismi yo'q; telefon va raqamlar saqlanmaydi) hamda jo'natuvchi nomlari.
+so'zlari (blankda fuqaro ismi yo'q; telefon va raqamlar saqlanmaydi) hamda jo'natuvchi nomlari,
+har jo'natuvchining raqam qolipi (B5.5: tuzilish va doimiy bosh qism "54/07-", tartib raqamisiz).
 U outputs/model.json da (gitignore'da) saqlanadi: nomlarni Claude ko'rmaydi.
 """
 
@@ -10,6 +11,7 @@ from pathlib import Path
 
 from src.common.schema import expected_boshqarma, group_of
 from src.common.text import most_common, normalize
+from src.fields.number_template import Template, learn
 from src.fields.regions import REGIONS, region_of_boshqarma
 from src.fields.sender import blank_words
 
@@ -28,6 +30,8 @@ class Model:
     summary: str | None = None
     sender_texts: list[str] = field(default_factory=list)  # dev xatlari blankining so'zlari
     sender_names: list[str] = field(default_factory=list)  # ularning jo'natuvchilari
+    # jo'natuvchi (normalize) -> raqam qolipi {"structure": "9/9-9/9", "prefix": "54/07-"}
+    number_templates: dict[str, dict] = field(default_factory=dict)
 
 
 def sender_part(blanks: list[str], truths: list[dict]) -> tuple[list[str], list[str]]:
@@ -35,6 +39,24 @@ def sender_part(blanks: list[str], truths: list[dict]) -> tuple[list[str], list[
     names = [(t.get("rekvizit_document") or {}).get("hujjat_junatuvchi_tashkilot") for t in truths]
     pairs = [(blank_words(b), name) for b, name in zip(blanks, names, strict=True) if name]
     return [text for text, _ in pairs], [name for _, name in pairs]
+
+
+def number_part(truths: list[dict]) -> dict[str, dict]:
+    """Har jo'natuvchining raqam qolipi — uning kamida 2 ta xatidan (number_template.learn)."""
+    by_sender: dict[str, list[str]] = {}
+    for truth in truths:
+        doc = truth.get("rekvizit_document") or {}
+        sender, number = doc.get("hujjat_junatuvchi_tashkilot"), doc.get("hujjat_raqami")
+        if sender and number:
+            by_sender.setdefault(normalize(sender), []).append(number)
+    learned = {sender: learn(numbers) for sender, numbers in by_sender.items()}
+    return {sender: asdict(template) for sender, template in learned.items() if template}
+
+
+def number_template(model: Model, sender: str | None) -> Template | None:
+    """Jo'natuvchining raqam qolipi (o'rganilmagan bo'lsa — None)."""
+    data = model.number_templates.get(normalize(sender)) if sender else None
+    return Template(**data) if data else None
 
 
 def learn_model(truths: list[dict], blanks: list[str] | None = None) -> Model:
@@ -50,7 +72,13 @@ def learn_model(truths: list[dict], blanks: list[str] | None = None) -> Model:
         (t.get("rekvizit_document") or {}).get("hujjatning_qisqacha_mazmuni") for t in truths
     ]
     sender_texts, sender_names = sender_part(blanks, truths) if blanks else ([], [])
-    return Model(names, most_common(summaries)[0], sender_texts, sender_names)
+    return Model(
+        names,
+        most_common(summaries)[0],
+        sender_texts,
+        sender_names,
+        number_part(truths),
+    )
 
 
 def template_matches(model: Model) -> tuple[int, int]:

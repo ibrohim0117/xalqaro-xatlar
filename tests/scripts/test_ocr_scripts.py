@@ -1,8 +1,10 @@
 """scripts/ocr testlari (make_crops, compare_ocr) — soxta xat bilan."""
 
 import json
+import re
+import sys
 
-from scripts.ocr import check_crops, make_crops
+from scripts.ocr import check_crops, compare_ocr, make_crops
 from scripts.ocr.compare_ocr import answers
 from src.evaluation.dataset import Letter
 from tests.conftest import make_letter_pdf
@@ -46,3 +48,56 @@ def test_check_crops_runs_on_a_letter(tmp_path, monkeypatch, capsys):
     # soxta xatda "12.03.2026 № 55/07-1234": sana ham, raqam ham o'z bo'lagida
     assert "matn qatlami  sana                    1               1                1" in out
     assert "matn qatlami  raqam                   1               1                1" in out
+
+
+class FakeReader:
+    def read(self, png: bytes) -> str:
+        return '{"sana": "12.03.2026", "raqam": "55/07-1234"}'
+
+
+def test_compare_adds_new_crops_to_saved_texts(tmp_path, monkeypatch, capsys):
+    pdf = make_letter_pdf(tmp_path / "xat.pdf")
+    (tmp_path / "crops" / "DOC_1").mkdir(parents=True)
+    (tmp_path / "crops" / "DOC_1" / "number.png").write_bytes(b"png")
+    out = tmp_path / "ocr"
+    out.mkdir()
+    (out / "vlm-extract.json").write_text(json.dumps({"DOC_1": {"header": "eski"}}))
+    truth = {"rekvizit_document": {"hujjat_sana": "12.03.2026", "hujjat_raqami": "55/07-1234"}}
+    monkeypatch.setattr(compare_ocr, "list_letters", lambda: [Letter("DOC_1", pdf, pdf)])
+    monkeypatch.setattr(compare_ocr, "load_split", lambda: {"dev": ["DOC_1"], "test": []})
+    monkeypatch.setattr(compare_ocr, "load_truth", lambda letter: truth)
+    monkeypatch.setattr(compare_ocr, "get_pages", lambda letter: pages_of(letter.pdf))
+    monkeypatch.setattr(compare_ocr, "make_reader", lambda name: FakeReader())
+    monkeypatch.setattr(compare_ocr, "CROPS_DIR", tmp_path / "crops")
+    monkeypatch.setattr(compare_ocr, "OUT_DIR", out)
+    monkeypatch.setattr(sys, "argv", ["compare_ocr", "vlm-extract", "--crops", "number"])
+    compare_ocr.main()
+
+    saved = json.loads((out / "vlm-extract.json").read_text())
+    assert saved["DOC_1"]["header"] == "eski"  # oldin o'qilgan bo'lak o'chmadi
+    assert "55/07-1234" in saved["DOC_1"]["number"]  # yangisi qo'shildi
+    assert "55/07" not in capsys.readouterr().out  # ekranga faqat sonlar
+
+
+def test_compare_saved_texts_without_ocr(tmp_path, monkeypatch, capsys):
+    pdf = make_letter_pdf(tmp_path / "xat.pdf")
+    out = tmp_path / "ocr"
+    out.mkdir()
+    header = '{"sana": "12.03.2026", "raqam": "55/07-1234"}'
+    saved = {"DOC_1": {"header": header}, "DOC_2": {"header": header}}
+    (out / "vlm-extract.json").write_text(json.dumps(saved))
+    truth = {"rekvizit_document": {"hujjat_sana": "12.03.2026", "hujjat_raqami": "55/07-1234"}}
+    letters = [Letter("DOC_1", pdf, pdf), Letter("DOC_2", pdf, pdf)]
+    monkeypatch.setattr(compare_ocr, "list_letters", lambda: letters)
+    monkeypatch.setattr(compare_ocr, "load_split", lambda: {"dev": ["DOC_1", "DOC_2"]})
+    monkeypatch.setattr(compare_ocr, "load_truth", lambda letter: truth)
+    monkeypatch.setattr(compare_ocr, "get_pages", lambda letter: pages_of(letter.pdf))
+    monkeypatch.setattr(compare_ocr, "make_reader", lambda name: 1 / 0)  # OCR chaqirilmasin
+    monkeypatch.setattr(compare_ocr, "OUT_DIR", out)
+    argv = ["compare_ocr", "vlm-extract", "--saved", "--crops", "header", "--ids", "DOC_2"]
+    monkeypatch.setattr(sys, "argv", argv)
+    compare_ocr.main()
+
+    rows = capsys.readouterr().out
+    assert "dev 1 xat" in rows  # faqat DOC_2
+    assert re.search(r"raqam: header bo'lagi\s+1\s+1 /1", rows)  # 1 javob, 1 to'g'ri

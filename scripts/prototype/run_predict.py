@@ -36,6 +36,7 @@ def main() -> None:
     same, total = template_matches(model)
     print(f"Model dev'dan o'rganildi: {len(model.names)} ta boshqarma nomi, qisqacha mazmun,")
     print(f"  {len(model.sender_names)} ta xatdan jo'natuvchi namunalari")
+    print(f"  {len(model.number_templates)} ta tashkilot uchun raqam qolipi (kamida 2 ta xatidan)")
     print(f"  viloyat nomlaridan '<hudud> adliya boshqarmasi' shabloniga mos: {same}/{total}")
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
