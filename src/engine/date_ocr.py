@@ -2,9 +2,11 @@
 
 Natija (B5.3b o'lchovlari, dev 70, oyna 365 kun):
   - auto: matn qatlamidan olingan sana — 13/13 (100%); bunda OCR umuman ishlamaydi;
-  - prefill: 1-OCR (VLM) sanasi, boshqa OCR tasdiqlagan — 27/28 (96%): maydonga yoziladi, lekin
-    "tekshirish kerak" belgisi bilan (sezdirmasdan yozilgan xato sana bo'lmasin);
-    VLM bo'lmasa — date bo'laklaridan kamida 2 OCR kelishgan sana (VLM'siz o'lchov: 18/18);
+  - prefill (fields/date_vote.prefill_date): VLM aniq savol bilan header'dan topgan sana, boshqa OCR
+    tasdiqlagan — 32/34 (B5.3c-8, X2): maydonga yoziladi, lekin "tekshirish kerak" belgisi bilan
+    (sezdirmasdan yozilgan xato sana bo'lmasin). Topuvchi — birinchi ISHLAGAN OCR: aniq savol
+    ishlamasa — VLM ko'chirish (27/28); VLM umuman bo'lmasa — date bo'laklaridan kamida 2 OCR
+    kelishgan sana (VLM'siz o'lchov: 18/18);
   - suggestions: ko'proq OCR ko'rgan 3 ta sana — xodim bir bosishda tanlaydi.
 Biror OCR ishlamasa (masalan, VLM serveri o'chiq) — shu xat uchun chetlanadi, qolganlari ishlaydi.
 """
@@ -21,20 +23,23 @@ from src.engine.locate import ocr_regions
 from src.fields.date_number import date_and_number
 from src.fields.date_vote import (
     WINDOW_DAYS,
-    confirmed,
     engine_dates,
     in_window,
+    prefill_date,
     ranked,
-    vote,
     windowed,
 )
-from src.reading.crops import crop_png
+from src.reading.crops import crop_png, dpi_for
 from src.reading.engines import LineReader, make_reader
 from src.reading.pages import CachedPage
 
 CROPS = ("date", "line", "header")  # sana uchun kerakli bo'laklar
-# Qaysi OCR'lar (tartib muhim: 1-si VLM bo'lsa — "biri topadi, boshqasi tasdiqlaydi")
-DEFAULT_READERS = "vlm,rapidocr,rapidocr-eslav,tesseract-block"
+# Aniq savol: header — topuvchi sana (X2, 46/65); page va line — faqat takliflar uchun (dev 70:
+# to'g'ri sana takliflarda 9 -> 14), yozish qoidasiga kirmaydi (VLM o'zini o'zi tasdiqlashi
+# ishonchsiz, X3)
+READER_CROPS = {"vlm-extract": ("header", "page", "line")}
+# Qaysi OCR'lar (tartib muhim: 1-si topuvchi bo'lsa — "biri topadi, boshqasi tasdiqlaydi")
+DEFAULT_READERS = "vlm-extract,vlm,rapidocr,rapidocr-eslav,tesseract-block"
 log = logging.getLogger(__name__)
 
 
@@ -47,11 +52,14 @@ class DateReading:
     readers: list[str] = field(default_factory=list)  # ishlagan OCR'lar
 
 
+def crops_for(reader: str) -> tuple[str, ...]:
+    """Bu OCR sana uchun qaysi bo'laklarni o'qiydi (o'lchov ham shu bilan — date_failures)."""
+    return READER_CROPS.get(reader, CROPS)
+
+
 class DateOcr:
-    def __init__(self, readers: list[LineReader], confirm_first: bool):
-        """confirm_first: 1-OCR (VLM) topadi, boshqasi tasdiqlaydi; aks holda — oddiy ovoz."""
+    def __init__(self, readers: list[LineReader]):
         self.readers = readers
-        self.confirm_first = confirm_first
 
     def read(self, page: pymupdf.Page, first: CachedPage, received: Date) -> DateReading:
         auto = date_and_number(first.text_layer)[0]
@@ -59,21 +67,27 @@ class DateOcr:
             return DateReading(auto=auto)
         start = time.perf_counter()
         regions = ocr_regions(first)
-        crops = {name: crop_png(page, regions[name]) for name in CROPS if name in regions}
+        wanted = {name for reader in self.readers for name in crops_for(reader.name)}
+        crops = {
+            name: crop_png(page, box, dpi=dpi_for(name))
+            for name, box in regions.items()
+            if name in wanted
+        }
         found, worked = [], []
         for reader in self.readers:
             # bitta OCR ishlamasa (masalan, VLM serveri o'chiq) — chetlanadi, qolganlari davom etadi
             try:
-                texts = {name: reader.read(png) for name, png in crops.items()}
+                texts = {
+                    name: reader.read(png)
+                    for name, png in crops.items()
+                    if name in crops_for(reader.name)
+                }
             except Exception as error:
                 log.warning("%s ishlamadi: %s", reader.name, error)
                 continue
             found.append(windowed(engine_dates(texts), received))
             worked.append(reader.name)
-        if self.confirm_first and worked[:1] == [self.readers[0].name]:
-            prefill = confirmed(found)
-        else:
-            prefill = vote([{f["date"]} - {None} for f in found])
+        prefill = prefill_date(found, worked[0] if worked else None)
         suggestions = ranked([{d for d in f.values() if d} for f in found])
         return DateReading(None, prefill, suggestions, time.perf_counter() - start, worked)
 
@@ -95,7 +109,7 @@ def build_date_ocr(names: str | None = None) -> DateOcr | None:
         readers.append(reader)
     if not readers:
         return None
-    return DateOcr(readers, confirm_first=readers[0].name == "vlm")
+    return DateOcr(readers)
 
 
 def apply_reading(answer: dict, reading: DateReading) -> None:

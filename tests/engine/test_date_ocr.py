@@ -39,14 +39,14 @@ def letter(tmp_path):
 
 def test_printed_date_is_automatic_and_ocr_is_skipped(letter):
     vlm = FakeReader("vlm", "01.01.2026")
-    reading = DateOcr([vlm], confirm_first=True).read(*letter(FAKE_LETTER), RECEIVED)
+    reading = DateOcr([vlm]).read(*letter(FAKE_LETTER), RECEIVED)
     assert reading.auto == "12.03.2026" and reading.prefill is None
     assert vlm.calls == 0  # matn qatlamidan topildi — OCR vaqti tejaldi
 
 
 def test_vlm_confirmed_by_another_ocr_is_prefilled(letter):
     readers = [FakeReader("vlm", "12.03.2026 № 55/07"), FakeReader("rapid", "12.03.2026 No 55")]
-    reading = DateOcr(readers, confirm_first=True).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
     assert reading.auto is None
     assert reading.prefill == "12.03.2026"  # "tekshiring" belgisi bilan yoziladi
     assert reading.suggestions == ["12.03.2026"]
@@ -55,14 +55,14 @@ def test_vlm_confirmed_by_another_ocr_is_prefilled(letter):
 
 def test_disagreement_gives_only_suggestions(letter):
     readers = [FakeReader("vlm", "12.03.2026"), FakeReader("rapid", "13.03.2026")]
-    reading = DateOcr(readers, confirm_first=True).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
     assert reading.prefill is None
     assert set(reading.suggestions) == {"12.03.2026", "13.03.2026"}
 
 
 def test_misread_year_is_outside_the_window(letter):
     readers = [FakeReader("vlm", "12.03.2015"), FakeReader("rapid", "12.03.2015")]
-    reading = DateOcr(readers, confirm_first=True).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
     assert reading.prefill is None and reading.suggestions == []
 
 
@@ -72,9 +72,33 @@ def test_broken_vlm_falls_back_to_vote(letter):
         FakeReader("rapid", "12.03.2026"),
         FakeReader("tesseract", "12.03.2026"),
     ]
-    reading = DateOcr(readers, confirm_first=True).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
     assert reading.readers == ["rapid", "tesseract"]  # VLM chetlandi
     assert reading.prefill == "12.03.2026"  # ikki OCR kelishdi (oddiy ovoz)
+
+
+def test_vlm_extract_reads_its_own_crops_and_needs_confirmation(letter):
+    extract = FakeReader("vlm-extract", '{"sana": "12.03.2026", "raqam": "55/07-1234"}')
+    rapid = FakeReader("rapid", "12.03.2026 No 55")
+    reading = DateOcr([extract, rapid]).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    assert extract.calls == 3  # header, page, line
+    assert rapid.calls == 3  # date, line, header ("number" va "page" o'qilmaydi)
+    assert reading.prefill == "12.03.2026"
+    # header va page'da bir xil sana — o'zini o'zi tasdiqlash hisob emas: yozilmaydi, faqat taklif
+    alone = DateOcr([FakeReader("vlm-extract", '{"sana": "12.03.2026"}')])
+    reading = alone.read(*letter(NO_PRINTED_DATE), RECEIVED)
+    assert reading.prefill is None and reading.suggestions == ["12.03.2026"]
+
+
+def test_broken_vlm_extract_leaves_the_old_vlm_as_finder(letter):
+    readers = [
+        FakeReader("vlm-extract", broken=True),
+        FakeReader("vlm", "12.03.2026 № 55/07"),
+        FakeReader("rapid", "12.03.2026 No 55"),
+    ]
+    reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    assert reading.readers == ["vlm", "rapid"]
+    assert reading.prefill == "12.03.2026"  # VLM ko'chirish topdi, RapidOCR tasdiqladi
 
 
 def answer_with(date_value=None, flags=("hujjat_sana", "hujjat_raqami")):

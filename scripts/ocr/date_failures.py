@@ -1,9 +1,11 @@
 """Sana: to'g'ri yozilmagan xatlarda nima bo'lyapti — VLM o'qimadimi, xato o'qidimi, biz noto'g'ri
 sanani tanladikmi yoki "№" qatori yo'qmi. OCR qayta ishlatilmaydi (outputs/ocr/*.json dan).
 
-Har dev xat prototip qoidasi bilan (matn qatlami -> auto; VLM + tasdiq -> ⚠; 3 taklif; oyna 365)
-to'rt holatdan biriga tushadi: yozildi to'g'ri / yozildi xato / faqat takliflarda / topilmadi.
-To'g'ri yozilmaganlarda — VLM har bo'lakda to'g'ri sanaga nisbatan qanday (explain_dates.relation).
+Har dev xat prototip qoidasi bilan (engine/date_ocr: o'sha OCR'lar, o'sha bo'laklar, prefill_date;
+matn qatlami -> auto; topuvchi VLM + tasdiq -> ⚠; 3 taklif; oyna 365) to'rt holatdan biriga
+tushadi: yozildi to'g'ri / yozildi xato / faqat takliflarda / topilmadi.
+To'g'ri yozilmaganlarda — 1-OCR (VLM) har bo'lakda to'g'ri sanaga nisbatan qanday
+(explain_dates.relation; compare_ocr saqlagan barcha bo'laklar).
 Ekranga FAQAT sonlar chiqadi; --ids — "topilmadi" xatlarning DOC raqamlari (qo'lda ko'rish uchun).
 
 Ishga tushirish: poetry run python -m scripts.ocr.date_failures [--ids]
@@ -15,32 +17,38 @@ from collections import Counter, defaultdict
 
 from scripts.ocr.compare_ocr import OUT_DIR
 from scripts.ocr.explain_dates import relation
+from src.engine.date_ocr import DEFAULT_READERS, crops_for
 from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
 from src.fields.date_number import DATE_PATTERNS, OCR_PATTERNS, date_and_number
 from src.fields.date_vote import (
     WINDOW_DAYS,
-    confirmed,
     engine_dates,
     in_window,
+    prefill_date,
     ranked,
     to_day,
     windowed,
 )
 
-READERS = ["vlm", "rapidocr", "rapidocr-eslav", "tesseract-block"]  # VLM birinchi (prototip kabi)
-CROPS = ("date", "line", "header")
+READERS = DEFAULT_READERS.split(",")  # prototip bilan bir xil (topuvchi VLM birinchi)
+CROPS = ("date", "line", "header", "page")
 OUTCOMES = ("yozildi to'g'ri", "yozildi xato", "faqat takliflarda", "topilmadi")
 
 
 def outcome(
-    texts: list[dict[str, str]], text_layer: str | None, truth: str, received, patterns=OCR_PATTERNS
+    texts: list[dict[str, str]],
+    text_layer: str | None,
+    truth: str,
+    received,
+    finder: str = READERS[0],
+    patterns=OCR_PATTERNS,
 ) -> str:
-    """Prototip qoidasi bilan bu xatda sana qaysi holatga tushadi."""
+    """Prototip qoidasi bilan bu xatda sana qaysi holatga tushadi (texts[0] — finder OCR'i)."""
     if in_window(text_layer, received, WINDOW_DAYS):
         return "yozildi to'g'ri" if text_layer == truth else "yozildi xato"
     found = [windowed(engine_dates(t, patterns), received) for t in texts]
-    if prefill := confirmed(found):
+    if prefill := prefill_date(found, finder):
         return "yozildi to'g'ri" if prefill == truth else "yozildi xato"
     return (
         "faqat takliflarda"
@@ -64,22 +72,27 @@ def main() -> None:
         document = load_truth(letters[doc_id]).get("rekvizit_document") or {}
         truth, received = document.get("hujjat_sana"), to_day(document.get("kirish_sana"))
         first = get_pages(letters[doc_id])[0]
-        texts = [saved[r].get(doc_id, {}) for r in READERS]
+        raw = [saved[r].get(doc_id, {}) for r in READERS]
+        # prototip har OCR'da faqat o'z bo'laklarini o'qiydi (vlm-extract — faqat header)
+        texts = [
+            {crop: text for crop, text in saved[r].get(doc_id, {}).items() if crop in crops_for(r)}
+            for r in READERS
+        ]
         text_layer = date_and_number(first.text_layer)[0]
         case = outcome(texts, text_layer, truth, received)
         cases[case] += 1
-        old = outcome(texts, text_layer, truth, received, DATE_PATTERNS)
+        old = outcome(texts, text_layer, truth, received, patterns=DATE_PATTERNS)
         if args.diff and old != case:
             changed.append(f"{doc_id}: {old} -> {case}")
         if case.startswith("yozildi"):
             continue
-        has_anchor = "line" in texts[0]  # bo'laklar "№" langari topilganda kesilgan (make_crops)
+        has_anchor = any("line" in r for r in raw)  # "№" topilganda kesilgan (make_crops)
         anchors[case, "bor" if has_anchor else "yo'q"] += 1
         for crop in CROPS:
-            kind = relation(texts[0][crop], truth) if crop in texts[0] else "bo'lak yo'q"
+            kind = relation(raw[0][crop], truth) if crop in raw[0] else "bo'lak yo'q"
             vlm[case, crop, kind.split(" (+")[0]] += 1
         if case == "topilmadi":
-            header = relation(texts[0].get("header", ""), truth).split(" (+")[0]
+            header = relation(raw[0].get("header", ""), truth).split(" (+")[0]
             missing[header, "'№' bor" if has_anchor else "'№' yo'q"].append(doc_id)
 
     print(f"Sana: to'g'ri yozilmagan xatlar tahlili, dev {len(dev)} xat\n")

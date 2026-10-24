@@ -1,9 +1,10 @@
 """B5.3b: sana — bir necha OCR o'qigan matndan ovoz berish (o'lchov ham, prototip ham shu koddan).
 
 Har OCR o'z bo'laklaridan (date, line, header, page) sana nomzodlarini beradi; har OCR o'zi topgan
-sanalar TO'PLAMI bilan bitta ovoz beradi. Qoida (dev 70, B5.3b-6, oyna 365):
-  - "biri topadi, boshqasi tasdiqlaydi" (confirmed): 1-OCR (VLM) sanasi, boshqa OCR ko'rgan bo'lsa —
-    28 tadan 27 to'g'ri: shuning uchun avtomatik EMAS, "tekshiring" belgisi bilan yoziladi;
+sanalar TO'PLAMI bilan bitta ovoz beradi. Qoida (dev 70, oyna 365):
+  - "biri topadi, boshqasi tasdiqlaydi" (prefill_date): topuvchi OCR (FINDERS) sanasi, boshqa OCR
+    ko'rgan bo'lsa. VLM aniq savol bilan (B5.3c-8, X2): 34 tadan 32 to'g'ri; VLM ko'chirish
+    (B5.3b-6): 28 tadan 27. Shuning uchun avtomatik EMAS, "tekshiring" belgisi bilan yoziladi;
   - takliflar (ranked): ko'proq OCR ko'rgan 3 ta sana;
   - oyna (in_window): sana kelgan kundan oldin va ko'pi bilan 365 kun oldin (dev'da 9..97 kun) —
     xato o'qilgan yil ("2015") chetlanadi.
@@ -72,6 +73,22 @@ def confirmed(
         return None
     seen = sum(first in {v for k, v in f.items() if keys is None or k in keys} for f in found[1:])
     return first if seen >= min_others else None
+
+
+# Topuvchi OCR -> uning sanasi qaysi bo'laklardan olinadi (keyin boshqa OCR tasdiqlashi kerak)
+FINDERS = {
+    "vlm-extract": HEADER,  # aniq savol: JSON'da "№" yo'q — header'dagi birinchi sana
+    "vlm": FIRST,  # ko'chirish: date bo'lagi yoki header'dagi "№" qatori
+}
+
+
+def prefill_date(found: list[dict[str, str | None]], finder: str | None) -> str | None:
+    """ "Tekshiring" belgisi bilan yoziladigan sana. found[0] — finder (FINDERS'da bo'lsa): uning
+    sanasi, boshqa OCR tasdiqlasa; aks holda (VLM yo'q) — date bo'laklaridan kamida 2 OCR kelishgan
+    sana."""
+    if finder in FINDERS:
+        return confirmed(found, first_keys=FINDERS[finder])
+    return vote([{f["date"]} - {None} for f in found])
 
 
 def ranked(per_engine: list[set[str]], k: int = 3) -> list[str]:

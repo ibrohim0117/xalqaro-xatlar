@@ -7,7 +7,13 @@ Koordinatalar nisbiy (0..1, engine/locate bilan bir xil). Diskka yozish — chaq
 import pymupdf
 
 CROP_DPI = 300  # OCR uchun (Tesseract ham shu aniqlikda o'qiydi)
+PAGE_DPI = 200  # butun sahifa: VLM baribir 1600 px gacha kichraytiradi — 300 dpi ortiqcha (5 MB)
 CROP_PAD = 0.01  # qo'lyozma ramkadan biroz chiqib ketishi mumkin — har tomonga sahifaning 1% i
+
+
+def dpi_for(name: str) -> int:
+    """Bo'lak aniqligi: butun sahifa ("page") — PAGE_DPI, qolganlari — CROP_DPI."""
+    return PAGE_DPI if name == "page" else CROP_DPI
 
 
 def crop_png(page: pymupdf.Page, box: dict, dpi: int = CROP_DPI, pad: float = CROP_PAD) -> bytes:
