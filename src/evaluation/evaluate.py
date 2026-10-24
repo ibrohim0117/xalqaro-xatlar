@@ -6,6 +6,8 @@ Ekranga FAQAT foizlar chiqadi. Har xat bo'yicha batafsil jadval outputs/ ga yozi
 AI natijasi: <papka>/<DOC_id>.json, tuzilishi to'g'ri javob json'i bilan bir xil.
 Boshqarma har doim tasks[0].asosiy_ijrochilar_boshqarmalari ga yoziladi (viloyat bo'lsa ham),
 kutilgan qiymat esa src.common.schema.expected_boshqarma qoidasi bilan olinadi.
+Har maydon aniqligi PDF turi bo'yicha ham chiqadi (1–6-sahifada matn qatlami: hammasida — "matn
+qatlamli", hech birida — "skaner", qolgani — "aralash"): skaner xatlar umumiy foizda yo'qolmasin.
 
 Ishga tushirish:
     poetry run python -m src.evaluation.evaluate outputs/baseline         # dev
@@ -19,15 +21,19 @@ from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
 
+import pymupdf
 from rapidfuzz import fuzz
 
 from src.common.schema import ALL_FIELDS, REKVIZIT_FIELDS, expected_boshqarma, group_of
 from src.common.text import normalize
 from src.evaluation.dataset import REAL_DIR, list_letters, load_split, load_truth
+from src.reading.pdf_text import has_text_layer, text_layer_words
 
 # Bo'shliqlar ma'noni o'zgartirmaydigan maydonlar ("O.N. Xrushev" == "O.N.Xrushev")
 SPACELESS = {"hujjat_sana", "hujjat_raqami", "imzolagan_shaxs"}
 DETAIL_COLUMNS = ["doc_id", "maydon", "kutilgan", "ai_javobi", "togri"]
+KINDS = ("matn qatlamli", "aralash", "skaner")
+KIND_PAGES = 6  # AI shu sahifalarni o'qiydi (engine/pipeline.MAX_PAGES)
 
 
 def predicted_boshqarma(prediction: dict) -> str | None:
@@ -147,6 +153,24 @@ def evaluate(
     return scores, dict(by_group), details
 
 
+def pdf_kind(pdf: Path) -> str:
+    """PDF turi: 1–6-sahifaning hammasida matn qatlami bor / hech birida yo'q / aralash."""
+    with pymupdf.open(pdf) as doc:
+        layers = [has_text_layer(text_layer_words(page)) for page in list(doc)[:KIND_PAGES]]
+    return "matn qatlamli" if all(layers) else "skaner" if not any(layers) else "aralash"
+
+
+def by_kind(details: list[dict], kinds: dict[str, str]) -> dict[tuple[str, str], FieldScore]:
+    """(PDF turi, maydon) -> baho (details — evaluate'ning har xat bo'yicha qatorlari)."""
+    scores: dict[tuple[str, str], FieldScore] = defaultdict(FieldScore)
+    for row in details:
+        field = row["maydon"]
+        scores[kinds[row["doc_id"]], field].add(
+            row["ai_javobi"], row["kutilgan"], spaceless=field in SPACELESS
+        )
+    return scores
+
+
 def write_details(details: list[dict], path: Path) -> None:
     path.parent.mkdir(exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as f:
@@ -176,6 +200,20 @@ def main() -> None:
     print("\n  boshqarma, guruhlar bo'yicha:")
     for group in sorted(by_group):
         print(f"    {group:<9} ({by_group[group].total:>2} xat)  {by_group[group].row()}")
+
+    letters = {letter.doc_id: letter for letter in list_letters()}
+    kinds = {doc_id: pdf_kind(letters[doc_id].pdf) for doc_id in doc_ids}
+    kind_scores = by_kind(details, kinds)
+    counts = {kind: sum(k == kind for k in kinds.values()) for kind in KINDS}
+    print("\n  PDF turi bo'yicha aniqlik (to'g'ri / xatlar):")
+    print(f"    {'':<28}" + "".join(f"{f'{kind} ({counts[kind]})':>22}" for kind in KINDS))
+    for field in ALL_FIELDS:
+        cells = []
+        for kind in KINDS:
+            score = kind_scores[kind, field]
+            cell = f"{score.correct}/{score.total} {pct(score.correct, score.total)}"
+            cells.append(f"{cell if score.total else '—':>22}")
+        print(f"    {field:<28}" + "".join(cells))
 
     report = Path("outputs") / f"{args.pred_dir.name}_{part}_batafsil.csv"
     write_details(details, report)

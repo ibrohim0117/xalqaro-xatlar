@@ -3,7 +3,10 @@
 import json
 from pathlib import Path
 
-from src.evaluation.evaluate import FieldScore, compare, evaluate
+import pymupdf
+
+from src.evaluation.evaluate import FieldScore, by_kind, compare, evaluate, pdf_kind
+from tests.conftest import make_letter_pdf, make_scanned_pdf
 
 VILOYAT = "Soxta viloyati adliya boshqarmasi"
 NOTARIAT = "Notariat, advokatura va mediatsiya boshqarmasi"
@@ -111,3 +114,25 @@ def test_compare_marks_correct_wrong_and_suggestions():
         "taklif_mos": True,
     }
     assert rows["hujjat_junatuvchi_tashkilot"]["taklif_mos"] is True  # variantlardan biri to'g'ri
+
+
+def test_pdf_kind(tmp_path):
+    letter = make_letter_pdf(tmp_path / "xat.pdf")  # 2-sahifada matn qatlami yo'q (conftest)
+    assert pdf_kind(letter) == "aralash"
+    assert pdf_kind(make_scanned_pdf(tmp_path / "skaner.pdf", letter)) == "skaner"
+    with pymupdf.open() as doc:  # bitta sahifa, to'liq matn qatlami
+        doc.new_page().insert_text((50, 72), "Министерство юстиции Республики Узбекистан. " * 3)
+        doc.save(tmp_path / "matn.pdf")
+    assert pdf_kind(tmp_path / "matn.pdf") == "matn qatlamli"
+
+
+def test_scores_by_pdf_kind():
+    def row(doc_id, expected, answer):
+        signer = "imzolagan_shaxs"
+        return {"doc_id": doc_id, "maydon": signer, "kutilgan": expected, "ai_javobi": answer}
+
+    details = [row("A", "A.B.Sidorov", "A.B. Sidorov"), row("B", "O.N.Petrov", None)]
+    scores = by_kind(details, {"A": "matn qatlamli", "B": "skaner"})
+    assert scores["matn qatlamli", "imzolagan_shaxs"].correct == 1  # bo'shliq farq emas
+    assert scores["skaner", "imzolagan_shaxs"].correct == 0
+    assert scores["skaner", "imzolagan_shaxs"].total == 1
