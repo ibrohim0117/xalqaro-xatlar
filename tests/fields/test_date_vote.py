@@ -7,7 +7,9 @@ from src.fields.date_vote import (
     engine_dates,
     header_anchor_date,
     in_window,
+    only_candidate,
     ranked,
+    self_confirmed,
     vote,
 )
 
@@ -67,3 +69,35 @@ def test_date_window_rejects_misread_year():
     assert not in_window("16.02.2026", received, 365)  # kelgan kundan keyin bo'lishi mumkin emas
     assert in_window("16.12.2015", received, None)  # tekshiruv o'chiq
     assert not in_window(None, received, 365)
+
+
+def test_self_confirmation_needs_two_different_crops():
+    both = engine_dates({"line": "12.03.2026 № 55", "header": "УПРАВЛЕНИЕ\n12.03.2026 № 55"})
+    assert self_confirmed([both]) == "12.03.2026"
+    only_header = engine_dates({"header": "УПРАВЛЕНИЕ\n12.03.2026 № 55"})
+    assert self_confirmed([only_header]) is None  # bitta bo'lak — tasdiq emas
+    differ = engine_dates({"line": "12.03.2026", "header": "13.03.2026"})
+    assert self_confirmed([differ]) is None
+
+
+def test_only_candidate():
+    one = [engine_dates({"header": "12.03.2026"}), engine_dates({"date": "12.03.2026"})]
+    assert only_candidate(one) == "12.03.2026"
+    two = [engine_dates({"header": "12.03.2026"}), engine_dates({"date": "13.03.2026"})]
+    assert only_candidate(two) is None
+    assert only_candidate([engine_dates({})]) is None
+
+
+def test_first_engine_date_from_chosen_crops():
+    # "aniq savol" VLM'i (vlm-extract) JSON beradi: unda "№" yo'q — sana header'dagi birinchi sana
+    extract = engine_dates({"header": '{"sana": "12.03.2026", "raqam": "55/07"}'})
+    rapid = engine_dates({"line": "12.03.2026 No 55/07"})
+    assert confirmed([extract, rapid]) is None  # standart: faqat date va "№" qatori
+    assert confirmed([extract, rapid], first_keys=("header_anchor", "header_first")) == "12.03.2026"
+
+
+def test_self_confirmation_with_whole_page():
+    found = engine_dates({"header": '{"sana": "12.03.2026"}', "page": '{"sana": "12.03.2026"}'})
+    assert found["page"] == "12.03.2026"
+    assert self_confirmed([found]) is None  # standart: date/line bilan solishtiriladi
+    assert self_confirmed([found], others=("line", "page")) == "12.03.2026"

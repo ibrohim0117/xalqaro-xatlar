@@ -9,7 +9,11 @@ compare_ocr saqlagan matnlar (outputs/ocr/<OCR>.json) va matn qatlamidagi sana a
   S5  1-OCR (masalan VLM) sanasi — date bo'lagi, bo'lmasa header'dagi "№" qatori — faqat kamida
       bitta boshqa OCR shu sanani biror bo'lakda ko'rgan bo'lsa (biri topadi, boshqasi tasdiqlaydi);
   S5a S5, lekin kamida IKKITA boshqa OCR tasdiqlashi kerak;
-  S5b S5, lekin tasdiq faqat ishonchli bo'laklardan (date yoki header'dagi "№" qatori).
+  S5b S5, lekin tasdiq faqat ishonchli bo'laklardan (date yoki header'dagi "№" qatori);
+  X1–X5 1-OCR — "aniq savol" VLM'i (vlm-extract): JSON'da "№" yo'q, shuning uchun uning sanasi date
+      bo'lagidan, bo'lmasa header'dagi birinchi sana. X1 — yolg'iz; X2 — boshqa OCR tasdiqlagan;
+      X3 — o'zi ikki bo'lakda (header va line yoki butun sahifa) bir xil o'qigan; X4 — X2 yoki X3;
+      X5 — X4 yoki prototip qoidasi (2-OCR, ya'ni VLM-ko'chir + qolganlarning tasdig'i = S5).
 "jami" — avtomatik to'g'ri + to'g'ri sana 3 taklif ichida (xodim bir bosishda tanlaydi).
 --window N: kelgan sanadan (json kirish_sana; real ishda — bugun) oldin va ko'pi bilan N kun oldingi
 sanalargina qabul qilinadi — "16.12.2015" kabi xato o'qilgan yil chetlanadi.
@@ -21,6 +25,7 @@ qo'lda tekshirish uchun.
 
 Avval: poetry run python -m scripts.ocr.compare_ocr rapidocr rapidocr-eslav tesseract-block
 Keyin: poetry run python -m scripts.ocr.combine_dates rapidocr rapidocr-eslav tesseract-block
+X uchun: ... combine_dates vlm-extract vlm rapidocr rapidocr-eslav tesseract-block --window 365
 """
 
 import argparse
@@ -33,11 +38,15 @@ from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
 from src.fields.date_number import date_and_number
 from src.fields.date_vote import (
+    HEADER,
     STRONG,
     confirmed,
     engine_dates,
+    first_date,
     in_window,
+    only_candidate,
     ranked,
+    self_confirmed,
     to_day,
     vote,
     windowed,
@@ -46,6 +55,16 @@ from src.fields.date_vote import (
 S5 = "S5 1-OCR + tasdiq"
 S5A = "S5a 1-OCR + 2 tasdiq"
 S5B = "S5b 1-OCR + ishonchli tasdiq"
+S6 = "S6 S5 yoki VLM o'zi 2 bo'lakda"
+S7 = "S7 S6 yoki yagona nomzod"
+X_FIRST = ("date", *HEADER)  # vlm-extract sanasi: date bo'lagi, bo'lmasa header
+X = {
+    "X1 1-OCR header yolg'iz": lambda found: first_date(found, X_FIRST),
+    "X2 1-OCR + boshqa OCR": lambda found: confirmed(found, first_keys=X_FIRST),
+    "X3 1-OCR o'zi 2 bo'lakda": lambda found: self_confirmed(found, X_FIRST, ("line", "page")),
+}
+X4 = "X4 X2 yoki X3"
+X5 = "X5 X4 yoki prototip (S5)"
 SOURCES = {  # strategiya -> har OCR'dan qaysi sanalar ovozga kiradi
     "S2 date bo'laklari": ("date",),
     "S3 + header '№' qatori": ("date", "header_anchor"),
@@ -89,6 +108,12 @@ def main() -> None:
         auto[S5] = text_layer or confirmed(found)
         auto[S5A] = text_layer or confirmed(found, min_others=2)
         auto[S5B] = text_layer or confirmed(found, keys=STRONG)
+        auto[S6] = text_layer or confirmed(found) or self_confirmed(found)
+        auto[S7] = auto[S6] or only_candidate(found)
+        for name, rule in X.items():
+            auto[name] = text_layer or rule(found)
+        auto[X4] = auto["X2 1-OCR + boshqa OCR"] or auto["X3 1-OCR o'zi 2 bo'lakda"]
+        auto[X5] = auto[X4] or confirmed(found[1:])  # found[1:] — 2-OCR birinchi (prototip kabi)
         everything = [{d for d in f.values() if d} for f in found]
         hint = vote(everything, min_votes=1)
         top3 = ranked(everything)
@@ -113,7 +138,9 @@ def main() -> None:
         f"{'3 ichida':>10}{'jami':>7}"
     )
     print(f"  {'strategiya':<30}{head}")
-    for name in ["S0 hozirgi (matn qatlami)", "S1 + 1-OCR date bo'lagi", *SOURCES, S5, S5A, S5B]:
+    names = ["S0 hozirgi (matn qatlami)", "S1 + 1-OCR date bo'lagi", *SOURCES, S5, S5A, S5B, S6, S7]
+    names += [*X, X4, X5]
+    for name in names:
         auto_n, ok = stats[name, "auto"], stats[name, "auto_ok"]
         hints = f"{stats[name, 'hint']:>9}{stats[name, 'hint_ok']:>9}{stats[name, 'top3_ok']:>10}"
         hints += f"{ok + stats[name, 'top3_ok']:>7}"
@@ -121,7 +148,7 @@ def main() -> None:
 
     if args.ids:
         print("\n  Avtomatik xatolar (DOC raqamlari):")
-        for name in (S5, S5A, S5B, "S2 date bo'laklari"):
+        for name in (S5, S6, S7, "S2 date bo'laklari", *X, X4, X5):
             print(f"    {name:<30} {', '.join(wrong.get(name, [])) or '—'}")
 
 
