@@ -1,9 +1,16 @@
 """src/fields/boshqarma.py testlari — soxta xatlar (conftest) va to'qilgan jumlalar bilan."""
 
-from src.fields.boshqarma import choose_region, letter_regions, recipient_and_body, text_regions
+from src.fields.boshqarma import (
+    choose_region,
+    letter_regions,
+    near_registry,
+    predict_group,
+    recipient_and_body,
+    text_regions,
+)
 from src.fields.regions import PLACE, STRONG, Hit
 from src.reading.pages import CachedPage
-from src.reading.pdf_text import read_text_layer
+from src.reading.pdf_text import PageText, Word, read_text_layer
 from tests.conftest import make_letter_pdf
 
 # Xat to'g'ridan-to'g'ri viloyat organiga yozilgan: hudud faqat o'ng blokda
@@ -71,3 +78,34 @@ def test_choose_region_by_total_weight_then_first():
     hits = [Hit("andijon", PLACE, 0, 5, ""), Hit("fargona", PLACE, 10, 15, "")]
     assert choose_region(hits) == "andijon"  # teng — birinchi uchragani
     assert choose_region([]) is None
+
+
+def text_page(number: int, text: str) -> CachedPage:
+    words = [Word(t, 0.1, 0.6, 0.2, 0.61, 0) for t in text.split()]
+    return CachedPage(number, PageText(number, "text_layer", words), None)
+
+
+def test_region_of_the_registry_office_wins():
+    filler = "Просим истребовать повторное свидетельство и направить его в наш адрес. " * 4
+    text = (
+        "Запись акта о рождении составлена отделом ЗАГС Наманганской области. "
+        f"{filler}Гражданин проживает: Андижанская область, г. Андижан."
+    )
+    pages = [text_page(1, "Просим оказать содействие"), text_page(2, text)]
+    hits = letter_regions(pages, max_pages=6)
+    assert choose_region(hits) == "andijon"  # ko'proq eslatilgan — fuqaroning yashash joyi
+    assert {h.key for h in near_registry(pages, hits)} == {"namangan"}
+    assert predict_group(pages) == ("viloyat", "namangan")  # hujjat qayd etilgan joy
+
+
+def test_without_registry_words_all_mentions_count():
+    pages = [text_page(1, "Просим"), text_page(2, "Проживает: Андижанская область, г. Андижан.")]
+    assert predict_group(pages) == ("viloyat", "andijon")
+
+
+def test_no_region_no_registry_means_international():
+    court = "Просим вручить решение суда по гражданскому делу"
+    letter = [text_page(1, "Просим"), text_page(2, court)]
+    assert predict_group(letter) == ("xalqaro", None)
+    registry = [text_page(1, "Просим"), text_page(2, "Просим истребовать запись акта о рождении")]
+    assert predict_group(registry) == (None, None)  # ЗАГС hujjati — viloyat, hudud noma'lum

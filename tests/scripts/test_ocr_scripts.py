@@ -101,3 +101,24 @@ def test_compare_saved_texts_without_ocr(tmp_path, monkeypatch, capsys):
     rows = capsys.readouterr().out
     assert "dev 1 xat" in rows  # faqat DOC_2
     assert re.search(r"raqam: header bo'lagi\s+1\s+1 /1", rows)  # 1 javob, 1 to'g'ri
+
+
+def test_region_near_registry_office_wins():
+    from scripts.boshqarma.measure_regions import choose_weighted
+    from src.fields.boshqarma import choose_region, letter_regions
+    from src.reading.pages import CachedPage
+    from src.reading.pdf_text import PageText, Word
+
+    def page(number, text):
+        words = [Word(t, 0.1, 0.6, 0.2, 0.61, 0) for t in text.split()]
+        return CachedPage(number, PageText(number, "text_layer", words), None)
+
+    filler = "Просим истребовать повторное свидетельство и направить его в наш адрес. " * 2
+    text = (
+        "Запись акта о рождении составлена отделом ЗАГС Наманганской области. "
+        f"{filler}Гражданин проживает: Андижанская область, г. Андижан."
+    )
+    pages = [page(1, "Просим оказать содействие"), page(2, text)]
+    hits = letter_regions(pages, recipient_mode="drop", max_pages=6)
+    assert choose_region(hits) == "andijon"  # ko'p eslatilgan
+    assert choose_weighted(hits, pages, 80, 3, False, 1) == "namangan"  # ЗАГС yonidagi

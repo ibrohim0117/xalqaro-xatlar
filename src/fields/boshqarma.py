@@ -6,6 +6,12 @@ B4.2 — hudud. 1-sahifaning o'ng yuqori bloki (qabul qiluvchi) va qolgan matn a
 - qolgan matnda vazirlik manzili ("юстиции Республики Узбекистан", "Сайилгох") yonidagi
   Toshkent hisobga olinmaydi.
 Hudud eslatmalari og'irligi bo'yicha eng kuchlisi tanlanadi.
+
+B5.7 — FHDYO hujjati so'ralganda hal qiluvchi joy hujjat qayd etilgan FHDYO (ЗАГС) bo'limi. Shuning
+uchun ЗАГС so'zlari yonida (±200 belgi) hudud tilga olingan bo'lsa — tanlov faqat shular orasidan
+(near_registry); bo'lmasa — avvalgidek hamma eslatmalardan. Dev (57 viloyat xati): hudud 48 → 51,
+buzilgani 0 (±80 va ±200 oyna ham 3 tadan tuzatdi; ikkalasini birlashtirish shu 4 xatga moslash
+bo'lardi — qilinmadi).
 """
 
 import re
@@ -26,6 +32,8 @@ RECIPIENT_MODES = ("keep", "drop", "tashkent")
 # Rahbar: "asosiy ma'lumot 1–2-sahifada, aniqlik uchun 1–4 olsa ham bo'ladi, qolgani ilova".
 # Dev (hudud, 57 xat): 1–2-sahifa 35, 1–4-sahifa 47, hamma sahifa 48 to'g'ri. Tanlandi 1–6 (zaxira).
 REGION_PAGES = 6
+REGISTRY = re.compile(r"загс|запис\w*\s+акт|актов\w*\s+запис|фхд|fhdy")  # FHDYO (ЗАГС) so'zlari
+REGISTRY_WINDOW = 200  # belgi
 
 
 def recipient_and_body(pages: list[CachedPage], max_pages: int | None = None) -> tuple[str, str]:
@@ -84,6 +92,16 @@ def letter_regions(
     return recipient_hits + body_hits
 
 
+def near_registry(
+    pages: list[CachedPage], hits: list[Hit], max_pages: int | None = REGION_PAGES
+) -> list[Hit]:
+    """letter_regions topilmalaridan ЗАГС so'zlari yonidagilari (±REGISTRY_WINDOW belgi)."""
+    recipient, body = recipient_and_body(pages, max_pages)
+    offset = len(prepare(recipient)) + 1  # letter_regions body topilmalarini shuncha suradi
+    marks = [m.start() + offset for m in REGISTRY.finditer(prepare(body))]
+    return [h for h in hits if any(abs(h.start - mark) <= REGISTRY_WINDOW for mark in marks)]
+
+
 def choose_region(hits: list[Hit]) -> str | None:
     """Og'irliklar yig'indisi eng katta hudud; teng bo'lsa — matnda birinchi uchragani."""
     if not hits:
@@ -106,7 +124,8 @@ CERTIFIED_COPY = re.compile(
 )
 INHERITANCE = re.compile(r"наследств|наследник|наследодател|завещ|имуществ")
 # "mention" — "нотари…" uchradi (N1); "no_copies" — "notarius tasdiqlagan nusxa" iborasisiz (N2);
-# "inheritance" — "нотари…" va meros so'zi birga (N3)
+# "inheritance" — "нотари…" va meros so'zi birga (N3). B5.7 da N4 ham sinaldi ("нотари…" + ЗАГС,
+# meros yo'q -> viloyat): 2 ta notariat xatini buzdi, kerakli 1 xatni tuzatmadi — olib tashlandi
 NOTARY_MODES = ("mention", "no_copies", "inheritance")
 
 
@@ -124,13 +143,19 @@ def is_notary(pages: list[CachedPage], mode: str = "mention") -> bool:
 def predict_group(
     pages: list[CachedPage], notary_mode: str = "mention"
 ) -> tuple[str | None, str | None]:
-    """(guruh, hudud kaliti). Avval notariat, keyin hudud. Ikkalasi ham topilmasa — (None, None):
-    "tekshirish kerak". "Hudud yo'q -> xalqaro" qoidasi ataylab qo'llanmaydi: dev'da 2 ta xalqaro
-    xat evaziga 5 ta viloyat xatini noto'g'ri yuborardi."""
+    """(guruh, hudud kaliti). Avval notariat, keyin hudud. Ikkalasi ham topilmasa: ЗАГС hujjati ham
+    so'ralmagan bo'lsa — xalqaro (B5.7c), so'ralgan bo'lsa — (None, None), "tekshirish kerak"
+    (viloyat xati, lekin hudud matnda yo'q). Dev: javobsiz 7 xatdan viloyat 5 tasida ЗАГС bor,
+    xalqaro 2 tasida yo'q. Oddiy "hudud yo'q -> xalqaro" 5 viloyatni xato yuborardi; ЗАГС sharti
+    ularni ajratadi. Faqat 2 misol — predict xalqaroni doim "tekshiring" bilan yozadi."""
     if is_notary(pages, notary_mode):
         return "notariat", None
-    region = choose_region(letter_regions(pages, max_pages=REGION_PAGES))
-    return ("viloyat", region) if region else (None, None)
+    hits = letter_regions(pages, max_pages=REGION_PAGES)
+    region = choose_region(near_registry(pages, hits) or hits)
+    if region:
+        return "viloyat", region
+    body = prepare(recipient_and_body(pages, REGION_PAGES)[1])
+    return (None, None) if REGISTRY.search(body) else ("xalqaro", None)
 
 
 EVIDENCE_LINES = 3  # xodimga ko'rsatiladigan dalil qatorlari (eng birinchilari)

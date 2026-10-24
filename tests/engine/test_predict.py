@@ -1,5 +1,7 @@
 """src/engine/predict.py testlari — soxta json'lar va to'qilgan nomlar bilan."""
 
+import json
+
 from src.engine.model import (
     Model,
     learn_model,
@@ -89,6 +91,9 @@ def test_model_learns_number_template_per_sender():
 def test_model_save_and_load(tmp_path):
     save_model(MODEL, tmp_path / "model.json")
     assert load_model(tmp_path / "model.json") == MODEL
+    old = tmp_path / "eski.json"  # boshqa versiya saqlagan: notanish maydon bor, yangisi yo'q
+    old.write_text(json.dumps({"names": {}, "summary": "Mazmun", "eski_maydon": 1}))
+    assert load_model(old) == Model(names={}, summary="Mazmun")
     assert Model() == Model(names={}, summary=None)
 
 
@@ -188,3 +193,13 @@ def test_reply_letter_gets_reply_summary():
     assert summary == "01.09.2025-yildagi 17/08-1/3001-son xat ijrosi bo'yicha"
     plain = predict(pages_of("Просим вручить документы"), model)["rekvizit_document"]
     assert plain["hujjatning_qisqacha_mazmuni"] == "Standart mazmun"
+
+
+def test_international_department_is_flagged():
+    xalqaro = "Xalqaro-huquqiy hamkorlik boshqarmasi"
+    task = {"asosiy_ijrochilar": ["SOXTA XODIM"], "asosiy_ijrochilar_boshqarmalari": [xalqaro]}
+    model = learn_model([truth(FARGONA), {"rekvizit_document": {}, "tasks": [task]}])
+    assert model.names["xalqaro"] == xalqaro
+    answer = predict(pages_of("Просим вручить решение суда по гражданскому делу"), model)
+    assert boshqarma_of(answer) == [xalqaro]
+    assert "boshqarma" in answer["tekshirish_kerak"]  # 2 ta misolga tayanadi — tekshiriladi

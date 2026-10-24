@@ -32,4 +32,6 @@ def test_predict_group_order():
         "viloyat",
         "fargona",
     )
-    assert predict_group(pages_of("Просим оказать правовую помощь")) == (None, None)
+    # hudud ham, notariat ham, ЗАГС ham yo'q — xalqaro (B5.7c); ЗАГС bor, hudud yo'q — javob yo'q
+    assert predict_group(pages_of("Просим оказать правовую помощь")) == ("xalqaro", None)
+    assert predict_group(pages_of("Просим истребовать запись ЗАГС")) == (None, None)

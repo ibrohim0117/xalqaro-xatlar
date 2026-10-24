@@ -23,6 +23,10 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
     flags = []
     if group == "notariat":
         name = model.names.get("notariat")
+    elif group == "xalqaro":
+        name = model.names.get("xalqaro")
+        if name:  # qoida faqat 2 ta dev misolga tayanadi — doim "tekshiring"
+            flags.append("boshqarma")
     elif group == "viloyat":
         name = model.names.get(region)
         if name is None:  # dev'da bu hudud uchragan emas — nom taxminiy

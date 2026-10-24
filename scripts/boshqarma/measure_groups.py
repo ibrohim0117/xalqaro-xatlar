@@ -12,11 +12,21 @@ from collections import Counter
 from src.common.schema import expected_boshqarma, group_of
 from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
-from src.fields.boshqarma import NOTARY_MODES, predict_group
-from src.fields.regions import region_of_boshqarma
+from src.fields.boshqarma import (
+    NOTARY_MODES,
+    REGION_PAGES,
+    REGISTRY,
+    predict_group,
+    recipient_and_body,
+)
+from src.fields.regions import prepare, region_of_boshqarma
 
-NAMES = {"mention": "N1 нотари…", "no_copies": "N2 nusxasiz", "inheritance": "N3 +meros"}
-COLUMNS = ["notariat", "viloyat", None]
+NAMES = {
+    "mention": "N1 нотари…",
+    "no_copies": "N2 nusxasiz",
+    "inheritance": "N3 +meros",
+}
+COLUMNS = ["notariat", "viloyat", "xalqaro", None]
 
 
 def main() -> None:
@@ -44,6 +54,17 @@ def main() -> None:
         confusions[mode] = confusion
         cells = [f"{outcome[k]:>3} ({outcome[k] / n:4.0%})" for k in ("ok", "kerak", "xato")]
         print(f"  {NAMES[mode]:<14}{cells[0]:>13}{cells[1]:>19}{cells[2]:>13}")
+
+    # B5.7c: hudud ham, notariat ham yo'q (javobsiz) xatlar — ЗАГС so'zlari bormi (1–6-sahifa)?
+    # Gipoteza: viloyat xati deyarli doim ЗАГС hujjatini so'raydi, xalqaro — yo'q.
+    unanswered = Counter()
+    for group, _, pages in data:
+        if predict_group(pages) == (None, None):
+            body = prepare(recipient_and_body(pages, REGION_PAGES)[1])
+            unanswered[group, "ЗАГС bor" if REGISTRY.search(body) else "ЗАГС yo'q"] += 1
+    print("\n  Javobsiz xatlar (hudud ham, notariat ham yo'q) — ЗАГС so'zlari, 1–6-sahifa:")
+    for (group, registry), count in sorted(unanswered.items()):
+        print(f"    {group:<10} {registry:<10} {count}")
 
     for mode in NOTARY_MODES:
         print(f"\n  {NAMES[mode]} — kutilgan guruh (qator) va AI javobi (ustun):")

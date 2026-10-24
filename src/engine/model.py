@@ -7,7 +7,7 @@ U outputs/model.json da (gitignore'da) saqlanadi: nomlarni Claude ko'rmaydi.
 """
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
 from src.common.schema import expected_boshqarma, group_of
@@ -22,7 +22,9 @@ REGION_NAMES = {region.key: region.name for region in REGIONS}
 
 
 def template_name(key: str) -> str:
-    """O'rganilmagan hudud uchun taxminiy nom: "Buxoro viloyati adliya boshqarmasi"."""
+    """O'rganilmagan hudud uchun taxminiy nom: "Buxoro viloyati adliya boshqarmasi".
+    B5.7 da nom shaklini boshqa nomlardan o'rganish sinaldi — LOO 0/10 (bu shablon 5/12):
+    json'dagi nomlar hududdan hududga har xil yozilgan, umumiy shakl yo'q — qaytarildi."""
     return f"{REGION_NAMES[key]} adliya boshqarmasi"
 
 
@@ -74,7 +76,8 @@ def learn_model(truths: list[dict], blanks: list[str] | None = None) -> Model:
     by_key: dict[str, list[str]] = {}
     for truth in truths:
         name = expected_boshqarma(truth)
-        key = "notariat" if group_of(name) == "notariat" else region_of_boshqarma(name)
+        group = group_of(name)
+        key = group if group in ("notariat", "xalqaro") else region_of_boshqarma(name)
         if key:
             by_key.setdefault(key, []).append(name)
     names = {key: most_common(values)[0] for key, values in by_key.items()}
@@ -105,4 +108,8 @@ def save_model(model: Model, path: Path = MODEL_FILE) -> None:
 
 
 def load_model(path: Path = MODEL_FILE) -> Model:
-    return Model(**json.loads(path.read_text(encoding="utf-8")))
+    """Fayldagi notanish maydonlar e'tiborsiz (kodning boshqa versiyasi saqlagan bo'lsa ham
+    ochiladi; yo'q maydonlar — standart qiymat)."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    known = {f.name for f in fields(Model)}
+    return Model(**{key: value for key, value in data.items() if key in known})
