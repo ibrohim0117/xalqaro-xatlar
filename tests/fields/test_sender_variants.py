@@ -2,7 +2,14 @@
 
 import pytest
 
-from src.fields.sender_variants import find_country, page_variants, region_names, sender_variants
+from src.fields.sender_variants import (
+    blank_places,
+    find_country,
+    page_variants,
+    region_names,
+    same_place,
+    sender_variants,
+)
 from src.reading.pages import CachedPage
 from src.reading.pdf_text import PageText, Word
 
@@ -127,3 +134,18 @@ def test_centered_blank_is_read_in_both_orders():
 
 def test_chinese_blank():
     assert sender_variants("中华人民共和国司法部") == ["Xitoy Xalq Respublikasi Adliya vazirligi"]
+
+
+def blank_page(text: str) -> list[CachedPage]:
+    words = [Word(t, 0.1, 0.05, 0.2, 0.06, 0) for t in text.split()]
+    return [CachedPage(1, PageText(1, "text_layer", words), None)]
+
+
+def test_place_of_the_blank_must_be_in_the_known_name():
+    novo = blank_places(blank_page("ГЛАВНОЕ УПРАВЛЕНИЕ МИНЮСТА ПО НОВОСИБИРСКОЙ ОБЛАСТИ"))
+    assert "Novosibirsk" in novo
+    assert same_place(novo, "Rossiya Federatsiyasi Adliya vazirligining Novosibirsk viloyati …")
+    moldova = blank_places(blank_page("Министерство юстиции Республики Молдова Агентство"))
+    assert moldova == ["Moldova"]
+    assert not same_place(moldova, "Gruziya Adliya vazirligi")  # tuzilishi o'xshash, joy boshqa
+    assert not same_place([], "Gruziya Adliya vazirligi")  # joy topilmasa — ehtiyot: yo'q

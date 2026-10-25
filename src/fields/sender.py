@@ -14,6 +14,7 @@ from collections import Counter
 
 from rapidfuzz import fuzz
 
+from src.common.text import normalize
 from src.fields.layout import header_bottom, in_recipient_block
 from src.fields.regions import prepare
 from src.reading.pages import CachedPage
@@ -31,6 +32,13 @@ TOKEN = re.compile(r"[a-zа-яёўқғҳ']{3,}")  # kamida 3 harfli so'zlar (raq
 # tashkilotning o'ziga xos so'zlarini filtr tashlab yuboradi — qayta aloqa bilan ishlamaydi.
 SENDER_MODE, SENDER_METHOD = "full", "tfidf"
 SENDER_THRESHOLD = 0.7
+# B5.8: ball chegaradan past, lekin 1-o'rindagi tashkilot 2-o'rindagi BOSHQA tashkilotdan kamida
+# SENDER_MARGIN oldinda VA blankdagi hudud/davlat uning nomida bor (sender_variants.same_place) —
+# yoziladi, "tekshiring" bilan. Dev (LOO): to'g'ri topilgan tanishlar margini >= 0.12, xato
+# topilganlar <= 0.03; notanishlar (1-o'rin doim xato) marginsi 0.23 gacha — ularni joy sharti
+# ushlaydi. 0.10 + joy: +3 to'g'ri, 0 xato (0.25 shartsiz ham +3/0, lekin faqat raqamga tayanadi:
+# xotirada tashkilot kam bo'lsa Moldova agentligi Gruziya agentligi bilan adashadi — testda bor).
+SENDER_MARGIN = 0.10
 MIN_DF = 2  # prune() uchun standart qiymat (B5.1b o'lchovida ishlatilgan)
 
 
@@ -90,6 +98,16 @@ class Matcher:
             return fuzz.token_set_ratio(prepare(text), self.texts[i]) / 100
         query = self._vector(tokens(text))
         return sum(v * self.vectors[i].get(w, 0.0) for w, v in query.items())
+
+    def ranked(self, text: str) -> list[tuple[float, str]]:
+        """Har tashkilot uchun eng yuqori o'xshashlik (kamayish tartibida): (ball, nom). Bir
+        tashkilot nomi turlicha yozilgan bo'lsa ham (katta/kichik harf) — bitta qator."""
+        best: dict[str, tuple[float, str]] = {}
+        for i, name in enumerate(self.names):
+            score, key = self.similarity(text, i), normalize(name)
+            if key not in best or score > best[key][0]:
+                best[key] = (score, name)
+        return sorted(best.values(), key=lambda pair: -pair[0])
 
     def best(self, text: str, exclude: int | None = None) -> tuple[str | None, float]:
         """(eng o'xshash dev xatining jo'natuvchisi, o'xshashlik). exclude — leave-one-out uchun."""

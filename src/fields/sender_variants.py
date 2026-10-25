@@ -190,3 +190,24 @@ def page_variants(pages: list[CachedPage], limit: int = 4) -> list[str]:
     merged = list(dict.fromkeys(v for text in variants_texts(pages) for v in sender_variants(text)))
     specific = [v for v in merged if not GENERIC.fullmatch(v)]
     return (specific + [v for v in merged if GENERIC.fullmatch(v)])[:limit]
+
+
+def blank_places(pages: list[CachedPage]) -> list[str]:
+    """B5.8: blankdagi joy — hudud nomi shakllari ("Nijegorod", "Nijegorodsk"), hudud bo'lmasa
+    davlat ("Moldova"). Tanilgan tashkilot nomida shu joy bormi — margin qoidasi uchun himoya:
+    notanish tashkilot tuzilishi o'xshash boshqasi bilan adashmasin (Moldova ≠ Gruziya)."""
+    places: list[str] = []
+    for text in variants_texts(pages):
+        low = RECIPIENT.sub(" ", prepare(text))
+        if region := find_region(low):
+            places += region[0]
+        elif country := find_country(low):
+            places.append(country.split()[0])
+    return list(dict.fromkeys(places))
+
+
+def same_place(places: list[str], name: str) -> bool:
+    """Tashkilot nomida blankdagi joylardan biri bormi (joy topilmagan bo'lsa — yo'q, ehtiyot)."""
+    low = prepare(name)
+    russia = "Rossiya" in places and re.match(r"rf\b", low)
+    return bool(russia) or any(prepare(place) in low for place in places)

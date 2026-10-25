@@ -9,8 +9,14 @@ from src.engine.model import Model, template_name
 from src.fields.boshqarma import predict_group
 from src.fields.date_number import date_number_answer
 from src.fields.reply import our_reference, own_numbers, reply_summary
-from src.fields.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text
-from src.fields.sender_variants import page_variants
+from src.fields.sender import (
+    SENDER_MARGIN,
+    SENDER_MODE,
+    SENDER_THRESHOLD,
+    Matcher,
+    header_text,
+)
+from src.fields.sender_variants import blank_places, page_variants, same_place
 from src.fields.signer import find_signer
 from src.reading.pages import CachedPage
 
@@ -43,13 +49,19 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
     if reference := our_reference(pages[:REPLY_PAGES], own_numbers(pages[0]), shapes):
         rekvizit["hujjatning_qisqacha_mazmuni"] = reply_summary(*reference)
     suggestions: dict = {}  # AI o'qigan/tarjima qilgan, lekin maydonga yozilmagan qiymatlar
-    sender, score = (
-        Matcher(model.sender_texts, model.sender_names).best(header_text(pages, SENDER_MODE))
+    ranking = (
+        Matcher(model.sender_texts, model.sender_names).ranked(header_text(pages, SENDER_MODE))
         if model.sender_texts
-        else (None, 0.0)
+        else []
     )
+    score, sender = ranking[0] if ranking else (0.0, None)
+    margin = score - (ranking[1][0] if len(ranking) > 1 else 0.0)
     if sender and score >= SENDER_THRESHOLD:
         rekvizit["hujjat_junatuvchi_tashkilot"] = sender
+    elif sender and margin >= SENDER_MARGIN and same_place(blank_places(pages), sender):
+        # B5.8: aniq ustun va blankdagi joy mos, lekin ball past — yoziladi, "tekshiring" bilan
+        rekvizit["hujjat_junatuvchi_tashkilot"] = sender
+        flags.append("hujjat_junatuvchi_tashkilot")
     else:  # notanish: taxmin yozilmaydi, xodimga o'zbekcha nom variantlari taklif qilinadi
         flags.append("hujjat_junatuvchi_tashkilot")
         if variants := page_variants(pages):

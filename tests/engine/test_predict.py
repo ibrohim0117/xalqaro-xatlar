@@ -203,3 +203,10 @@ def test_international_department_is_flagged():
     answer = predict(pages_of("Просим вручить решение суда по гражданскому делу"), model)
     assert boshqarma_of(answer) == [xalqaro]
     assert "boshqarma" in answer["tekshirish_kerak"]  # 2 ta misolga tayanadi — tekshiriladi
+
+
+def test_familiar_sender_with_low_score_but_clear_margin():
+    blank = "УПРАВЛЕНИЕ ПО НОВОСИБИРСКОЙ ОБЛАСТИ отдел"  # blank qisqaroq — ball 0.7 dan past
+    answer = predict(letter_with_blank(blank), SENDER_MODEL)
+    assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] == "Soxta Novosibirsk"
+    assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]  # past ball — tekshiriladi
