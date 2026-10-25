@@ -17,6 +17,7 @@ export function initBatch(openSingleTab) {
     loadEntries([...$("folder").files].map((file) => ({ path: file.webkitRelativePath || file.name, file }))),
   );
   $("batch-run").addEventListener("click", run);
+  $("batch-retry").addEventListener("click", retryFailed);
   $("batch-stop").addEventListener("click", () => {
     stopRequested = true;
     setStatus("To'xtatilmoqda: joriy xat tugashini kutyapmiz…");
@@ -76,10 +77,7 @@ function setStatus(text) {
 // ── Ketma-ket tahlil ──
 async function run() {
   rows = [];
-  stopRequested = false;
-  $("batch-run").disabled = true;
-  $("batch-stop").disabled = false;
-  $("batch-csv").disabled = true;
+  begin();
   $("batch-result").hidden = false;
   $("batch-rows").replaceChildren();
   renderSummary();
@@ -87,16 +85,49 @@ async function run() {
     if (stopRequested) break;
     setStatus(`${i + 1} / ${letters.length}: ${letter.name} o'qilyapti…`);
     $("batch-progress").value = i / letters.length;
-    let row;
-    try {
-      row = { letter, answer: await extract(letter.pdf, letter.truth) };
-    } catch (error) {
-      row = { letter, error: error.message };
-    }
+    const row = await analyze(letter);
     rows.push(row);
     $("batch-rows").append(tableRow(row, rows.length));
     renderSummary();
   }
+  finish();
+}
+
+/** Bitta xat. Server javob bermasa — xato va necha soniyadan keyin uzilgani (sababni topish uchun:
+ * darhol — server o'chiq; uzoq kutib — so'rov yo'lda uzilgan). */
+async function analyze(letter) {
+  const start = performance.now();
+  try {
+    return { letter, answer: await extract(letter.pdf, letter.truth) };
+  } catch (error) {
+    const seconds = Math.round((performance.now() - start) / 1000);
+    return { letter, error: `${error.message} (${seconds} s dan keyin)` };
+  }
+}
+
+/** Faqat xato bergan xatlar qayta tahlil qilinadi — jadvaldagi o'rnida almashadi. */
+async function retryFailed() {
+  const failed = rows.map((row, i) => [row, i]).filter(([row]) => row.error);
+  begin();
+  for (const [n, [row, i]] of failed.entries()) {
+    if (stopRequested) break;
+    setStatus(`Qayta: ${n + 1} / ${failed.length}: ${row.letter.name} o'qilyapti…`);
+    rows[i] = await analyze(row.letter);
+    $("batch-rows").replaceChildren(...rows.map((r, k) => tableRow(r, k + 1)));
+    renderSummary();
+  }
+  finish();
+}
+
+function begin() {
+  stopRequested = false;
+  $("batch-run").disabled = true;
+  $("batch-retry").disabled = true;
+  $("batch-stop").disabled = false;
+  $("batch-csv").disabled = true;
+}
+
+function finish() {
   $("batch-progress").value = rows.length / letters.length;
   const failed = rows.filter((r) => r.error).length;
   setStatus(
@@ -104,6 +135,8 @@ async function run() {
       (failed ? `, ${failed} tasi o'qilmadi` : ""),
   );
   $("batch-run").disabled = false;
+  $("batch-retry").hidden = !failed;
+  $("batch-retry").disabled = !failed;
   $("batch-stop").disabled = true;
   $("batch-csv").disabled = !rows.length;
 }
@@ -146,7 +179,8 @@ function tableRow({ letter, answer, error }, number) {
 // ── Umumiy hisob ──
 /**
  * Har maydon: aniqlik = to'g'ri / hamma xat; qamrov = javob berilgan / hamma xat;
- * ishonchlilik = to'g'ri / javob berilgan; taklif — maydon bo'sh, taklif to'g'ri chiqqanlari.
+ * ishonchlilik = to'g'ri / javob berilgan; taklif — maydon bo'sh, taklif to'g'ri chiqqanlari;
+ * bir bosishda = yozilgani to'g'ri YOKI to'g'risi takliflar ichida / hamma xat.
  * Qoida src/evaluation/evaluate.py dagi FieldScore bilan bir xil. Faqat json bor xatlar sanaladi.
  */
 export function summarize(answers) {
@@ -163,6 +197,7 @@ export function summarize(answers) {
       answered,
       suggestionsRight: suggested.filter((m) => m.taklif_mos).length,
       suggestions: suggested.length,
+      oneClick: marks.filter((m) => m.mos === true || m.taklif_mos === true).length,
     };
   });
 }
@@ -194,6 +229,7 @@ function renderSummary() {
         el("td", { className: "num" }, pct(s.answered, s.total)),
         el("td", { className: "num" }, pct(s.correct, s.answered)),
         el("td", { className: "num" }, s.suggestions ? `${s.suggestionsRight}/${s.suggestions}` : "—"),
+        el("td", { className: "num" }, `${pct(s.oneClick, s.total)} (${s.oneClick}/${s.total})`),
       ),
     ),
   );

@@ -60,6 +60,7 @@
         </label>
         <button type="button" id="batch-run" disabled>Boshlash</button>
         <button type="button" id="batch-stop" class="secondary" disabled>To'xtatish</button>
+        <button type="button" id="batch-retry" class="secondary" hidden>Xato berganlarni qayta tahlil qilish</button>
         <p id="batch-status" class="status" role="status" aria-live="polite"></p>
       </div>
 
@@ -77,6 +78,7 @@
                 <th title="AI javob bergan / hamma xat">Qamrov</th>
                 <th title="To'g'ri / AI javob bergan">Ishonchlilik</th>
                 <th title="Maydon bo'sh, lekin taklif to'g'ri">Taklif to'g'ri</th>
+                <th title="Yozilgani to'g'ri yoki to'g'risi takliflar ichida / hamma xat">Bir bosishda</th>
               </tr>
             </thead>
             <tbody id="batch-summary-rows"></tbody>
