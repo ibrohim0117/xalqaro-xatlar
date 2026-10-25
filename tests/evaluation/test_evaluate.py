@@ -136,3 +136,13 @@ def test_scores_by_pdf_kind():
     assert scores["matn qatlamli", "imzolagan_shaxs"].correct == 1  # bo'shliq farq emas
     assert scores["skaner", "imzolagan_shaxs"].correct == 0
     assert scores["skaner", "imzolagan_shaxs"].total == 1
+
+
+def test_one_click_counts_correct_or_suggested():
+    score = FieldScore()
+    score.add("A", "A")  # yozilgan, to'g'ri
+    score.add(None, "B", suggested=True)  # yozilmagan, takliflarda bor
+    score.add("X", "C")  # yozilgan, xato
+    score.add(None, "D")  # yozilmagan, takliflarda yo'q
+    assert (score.correct, score.answered, score.one_click, score.total) == (1, 2, 2, 4)
+    assert "bir bosishda  50.0%" in score.row()

@@ -221,3 +221,11 @@ def test_familiar_sender_with_low_score_but_clear_margin():
     answer = predict(letter_with_blank(blank), SENDER_MODEL)
     assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] == "Soxta Novosibirsk"
     assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]  # past ball — tekshiriladi
+
+
+def test_low_score_sender_suggests_familiar_senders_too():
+    # ball past, blankda joy yo'q — yozilmaydi; eng o'xshash tanish tashkilot taklif qilinadi,
+    # umuman o'xshamagani (ball 0) — yo'q
+    answer = predict(letter_with_blank("ГЛАВНОЕ УПРАВЛЕНИЕ отдел"), SENDER_MODEL)
+    assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] is None
+    assert answer["takliflar"]["hujjat_junatuvchi_tashkilot"] == ["Soxta Novosibirsk"]

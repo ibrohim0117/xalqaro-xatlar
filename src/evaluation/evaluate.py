@@ -8,6 +8,8 @@ Boshqarma har doim tasks[0].asosiy_ijrochilar_boshqarmalari ga yoziladi (viloyat
 kutilgan qiymat esa src.common.schema.expected_boshqarma qoidasi bilan olinadi.
 Har maydon aniqligi PDF turi bo'yicha ham chiqadi (1–6-sahifada matn qatlami: hammasida — "matn
 qatlamli", hech birida — "skaner", qolgani — "aralash"): skaner xatlar umumiy foizda yo'qolmasin.
+"Bir bosishda" (B5.10) — qo'shimcha ko'rsatkich: yozilgan qiymat to'g'ri YOKI to'g'risi takliflar
+ichida (xodim bitta bosish bilan tasdiqlaydi). Asosiy ko'rsatkich — aniqlik (faqat yozilgani).
 
 Ishga tushirish:
     poetry run python -m src.evaluation.evaluate outputs/baseline         # dev
@@ -64,6 +66,13 @@ def _same(a: str | None, b: str | None, field: str) -> bool:
     return bool(a) and normalize(a, spaceless) == normalize(b, spaceless)
 
 
+def suggested(prediction: dict, field: str, expected: str | None) -> bool:
+    """To'g'ri qiymat shu maydon takliflari ichida bormi."""
+    options = (prediction.get("takliflar") or {}).get(field) or []
+    options = options if isinstance(options, list) else [options]
+    return any(_same(o, expected, field) for o in options)
+
+
 def compare(answer: dict, truth: dict) -> dict[str, dict]:
     """Test rejimi: har maydon bo'yicha AI javobi va to'g'ri javob (shu modul qoidalari bilan).
     mos: True/False, AI javob bermagan bo'lsa — None ("tekshirish kerak" — xato emas).
@@ -75,9 +84,7 @@ def compare(answer: dict, truth: dict) -> dict[str, dict]:
         if predicted:
             row["mos"] = _same(predicted, expected, field)
         if field in suggestions:
-            options = suggestions[field]
-            options = options if isinstance(options, list) else [options]
-            row["taklif_mos"] = any(_same(o, expected, field) for o in options)
+            row["taklif_mos"] = suggested(answer, field, expected)
         out[field] = row
     return out
 
@@ -95,25 +102,34 @@ class FieldScore:
     correct: int = 0
     similarity: float = 0.0  # javob berilganlar bo'yicha o'xshashliklar yig'indisi (har biri 0..1)
     empty_truth: int = 0  # json'da qiymati bo'sh xatlar — faqat bilish uchun
+    one_click: int = 0  # yozilgani to'g'ri yoki to'g'risi takliflarda
 
-    def add(self, predicted: str | None, expected: str | None, spaceless: bool = False) -> bool:
+    def add(
+        self,
+        predicted: str | None,
+        expected: str | None,
+        spaceless: bool = False,
+        suggested: bool = False,
+    ) -> bool:
         self.total += 1
         if not expected:
             self.empty_truth += 1
-        if not predicted:
-            return False  # "bilmayman": xato emas, lekin to'g'ri ham emas
-        self.answered += 1
-        a, b = normalize(predicted, spaceless), normalize(expected, spaceless)
-        self.similarity += fuzz.ratio(a, b) / 100
-        is_correct = a == b
-        self.correct += is_correct
+        is_correct = False
+        if predicted:  # yozilmagan — "bilmayman": xato emas, lekin to'g'ri ham emas
+            self.answered += 1
+            a, b = normalize(predicted, spaceless), normalize(expected, spaceless)
+            self.similarity += fuzz.ratio(a, b) / 100
+            is_correct = a == b
+            self.correct += is_correct
+        self.one_click += is_correct or suggested
         return is_correct
 
     def row(self) -> str:
         sim = f"{self.similarity / self.answered:4.2f}" if self.answered else "   —"
         text = (
             f"aniqlik {pct(self.correct, self.total)} | qamrov {pct(self.answered, self.total)}"
-            f" | ishonchlilik {pct(self.correct, self.answered)} | o'xshashlik {sim}"
+            f" | ishonchlilik {pct(self.correct, self.answered)}"
+            f" | bir bosishda {pct(self.one_click, self.total)} | o'xshashlik {sim}"
         )
         if self.empty_truth:
             text += f" | json'da bo'sh: {self.empty_truth}"
@@ -138,7 +154,12 @@ def evaluate(
         truth = load_truth(letters[doc_id])
         prediction = load_prediction(pred_dir, doc_id)
         for field, (predicted, expected) in field_values(prediction, truth).items():
-            is_correct = scores[field].add(predicted, expected, spaceless=field in SPACELESS)
+            is_correct = scores[field].add(
+                predicted,
+                expected,
+                spaceless=field in SPACELESS,
+                suggested=suggested(prediction, field, expected),
+            )
             if field == "boshqarma":
                 by_group[group_of(expected)].add(predicted, expected)
             details.append(

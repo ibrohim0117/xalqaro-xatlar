@@ -20,6 +20,7 @@ from src.fields.sender_variants import blank_places, page_variants, same_place
 from src.fields.signer import find_signer
 from src.reading.pages import CachedPage
 
+KNOWN_SUGGESTIONS = 3  # past balli jo'natuvchida taklif qilinadigan tanish tashkilotlar
 REPLY_PAGES = 6  # javob xat havolasi shu sahifalardan qidiriladi (pipeline.MAX_PAGES bilan bir xil)
 
 
@@ -62,10 +63,13 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         # B5.8: aniq ustun va blankdagi joy mos, lekin ball past — yoziladi, "tekshiring" bilan
         rekvizit["hujjat_junatuvchi_tashkilot"] = sender
         flags.append("hujjat_junatuvchi_tashkilot")
-    else:  # notanish: taxmin yozilmaydi, xodimga o'zbekcha nom variantlari taklif qilinadi
+    else:  # notanish yoki ball past: taxmin yozilmaydi, xodimga takliflar
         flags.append("hujjat_junatuvchi_tashkilot")
-        if variants := page_variants(pages):
-            suggestions["hujjat_junatuvchi_tashkilot"] = variants
+        # o'zbekcha nom variantlari (blankdan) va B5.10: eng o'xshash TANISH tashkilotlar — ball
+        # past bo'lsa ham to'g'risi ko'pincha shular orasida (dev: 2 xatda 1- va 2-o'rinda)
+        known = [name for score, name in ranking[:KNOWN_SUGGESTIONS] if score > 0]
+        if options := list(dict.fromkeys(page_variants(pages) + known)):
+            suggestions["hujjat_junatuvchi_tashkilot"] = options
     signer = find_signer(pages)
     if signer:
         rekvizit["imzolagan_shaxs"] = signer.latin()
