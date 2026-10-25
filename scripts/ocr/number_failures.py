@@ -38,6 +38,7 @@ Ishga tushirish: poetry run python -m scripts.ocr.number_failures [--ids]
 
 import argparse
 import json
+import os
 import re
 from collections import Counter, defaultdict
 
@@ -66,7 +67,8 @@ from src.fields.number_vote import (
     ranked_numbers,
 )
 
-READERS = DEFAULT_READERS.split(",")  # prototip bilan bir xil: aniq savol VLM birinchi
+# prototip bilan bir xil (SANA_OCR — prototip ham shuni o'qiydi); aniq savol VLM birinchi
+READERS = os.environ.get("SANA_OCR", DEFAULT_READERS).split(",")
 CROP_ORDER = ("number", "line", "header", "page", "matn qatlami", "sahifa OCR")
 N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10 = (
     "N0 hozirgi (faqat taklif)",
@@ -81,8 +83,15 @@ N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10 = (
     "N9 matn qatlami, qolipga mos",
     "N10 N9 yoki N4",
 )
+# B5.14: Apple Vision (SANA_OCR da bo'lsa) — number bo'lagi
+N11, N12, N13 = (
+    "N11 Vision number yolg'iz",
+    "N12 Vision number, qolipga mos",
+    "N13 N4 yoki N12",
+)
+VISION = "apple-vision"
 NP = "NP prototip (=N4)"
-RULES = (N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, NP)
+RULES = (N0, N1, N2, N3, N4, N5, N6, N7, N8, N9, N10, N11, N12, N13, NP)
 PLAIN, TEMPLATE = "qolipsiz", "qolip bilan"
 SEPARATORS = "/-._\\"
 
@@ -170,6 +179,8 @@ def rules(
     strict = confirmed_number([*without_old, text])
     printed = text["matn qatlami"]
     valid = printed if template and printed and matches(printed, template) else None
+    vision = found[READERS.index(VISION)].get("number") if VISION in READERS else None
+    vision_valid = vision if template and vision and matches(vision, template) else None
     return {
         N0: None,
         N1: text["matn qatlami"],
@@ -182,6 +193,9 @@ def rules(
         N8: strict or views_agree(found[0]),
         N9: valid,
         N10: valid or strict,
+        N11: vision,
+        N12: vision_valid,
+        N13: strict or vision_valid,
         NP: number_reading(READERS, found, text, template)[0],
     }
 

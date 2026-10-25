@@ -10,6 +10,7 @@ Natija (B5.3b o'lchovlari, dev 70, oyna 365 kun):
     ishlamasa — VLM ko'chirish (27/28); VLM umuman bo'lmasa — date bo'laklaridan kamida 2 OCR
     kelishgan sana (VLM'siz o'lchov: 18/18);
   - suggestions: ko'proq OCR ko'rgan 3 ta sana — xodim bir bosishda tanlaydi.
+B5.11 yil tuzatish va B5.14 Apple Vision bilan (dev 70): sana to'g'ri 54, xato 2, bir bosishda 63.
 Biror OCR ishlamasa (masalan, VLM serveri o'chiq) — shu xat uchun chetlanadi, qolganlari ishlaydi.
 """
 
@@ -39,9 +40,17 @@ CROPS = ("date", "line", "header")  # sana uchun kerakli bo'laklar
 # Aniq savol: header — topuvchi sana (X2, 46/65); page va line — faqat takliflar uchun (dev 70:
 # to'g'ri sana takliflarda 9 -> 14), yozish qoidasiga kirmaydi (VLM o'zini o'zi tasdiqlashi
 # ishonchsiz, X3)
-READER_CROPS = {"vlm-extract": ("header", "page", "line")}
+READER_CROPS = {
+    "vlm-extract": ("header", "page", "line"),
+    # B5.14: Apple Vision tez (bo'lakka ~0.15 s) — raqam bo'lagi (dev: 16/70, VLM header 22) va
+    # butun sahifa ham o'qiladi
+    "apple-vision": ("date", "line", "header", "number", "page"),
+}
 # Qaysi OCR'lar (tartib muhim: 1-si topuvchi bo'lsa — "biri topadi, boshqasi tasdiqlaydi")
-DEFAULT_READERS = "vlm-extract,vlm,rapidocr,rapidocr-eslav,tesseract-block"
+# B5.14: apple-vision (macOS'ning o'z OCR'i, oflayn, ~1 s/xat) — tasdiqlovchi; dev 70: sana
+# 53 -> 54, raqam to'g'ri 18 -> 23, xato 3 -> 6 (⚠ bilan), bir bosishda 40 o'zgarmadi.
+# macOS bo'lmasa — chetlanadi (build_date_ocr ogohlantiradi)
+DEFAULT_READERS = "vlm-extract,vlm,rapidocr,rapidocr-eslav,tesseract-block,apple-vision"
 log = logging.getLogger(__name__)
 
 

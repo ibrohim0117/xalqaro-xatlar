@@ -15,6 +15,7 @@ Ishga tushirish: poetry run python -m scripts.ocr.date_failures [--ids]
 
 import argparse
 import json
+import os
 from collections import Counter, defaultdict
 
 from scripts.ocr.compare_ocr import OUT_DIR
@@ -33,7 +34,8 @@ from src.fields.date_vote import (
     windowed,
 )
 
-READERS = DEFAULT_READERS.split(",")  # prototip bilan bir xil (topuvchi VLM birinchi)
+# prototip bilan bir xil (SANA_OCR — prototip ham shuni o'qiydi); topuvchi VLM birinchi
+READERS = os.environ.get("SANA_OCR", DEFAULT_READERS).split(",")
 CROPS = ("date", "line", "header", "page")
 OUTCOMES = ("yozildi to'g'ri", "yozildi xato", "faqat takliflarda", "topilmadi")
 

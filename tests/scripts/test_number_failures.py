@@ -18,6 +18,8 @@ from scripts.ocr.number_failures import (
     N8,
     N9,
     N10,
+    N11,
+    N13,
     READERS,
     digits,
     edit_kinds,
@@ -101,6 +103,7 @@ def test_rules():
     written = rules(found_with({"header": TRUTH}, rapid={"number": TRUTH}), printed, False)
     assert written[N1] == "99/01-1" and written[N6] == "99/01-1"  # matn qatlami birinchi
     assert written[N4] == TRUTH  # RapidOCR tasdiqladi
+    assert written[N11] is None and written[N13] == TRUTH  # Vision SANA_OCR da yo'q
 
 
 def test_main_prints_only_counts(tmp_path, monkeypatch, capsys):

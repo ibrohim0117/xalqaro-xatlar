@@ -4,7 +4,8 @@ matn qatlami va sahifa OCR'idagi "№" raqamidan hamda jo'natuvchining raqam qol
 Qoida — fields/number_vote.number_reading (o'lchov: scripts/ocr/number_failures, NP qatori; dev 70):
 qolip bilan 12 tadan 11 to'g'ri "tekshiring" belgisi bilan yoziladi; bir bosishda (yozilgan + 3 ta
 taklif) 39/70, avvalgi prototipda 9/70. B5.12: OCR sanasi bosma xatlarda ham ishlaydi — 21 tadan
-18 to'g'ri (xato 3, hammasi ⚠ bilan), bir bosishda 40/70.
+18 to'g'ri (xato 3, hammasi ⚠ bilan), bir bosishda 40/70. B5.14: Apple Vision (number bo'lagi ham)
+tasdiqlovchi — 29 tadan 23 to'g'ri (xato 6), bir bosishda 40/70.
 """
 
 from dataclasses import dataclass, field

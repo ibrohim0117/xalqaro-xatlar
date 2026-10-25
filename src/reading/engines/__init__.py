@@ -36,6 +36,8 @@ READERS: dict[str, tuple[str, str, dict]] = {
         "VlmReader",
         {"mode": "extract", "max_side": 1600, "model": "models/vlm/Qwen3.5-4B-4bit"},
     ),
+    # B5.14 sinov: macOS'ning o'z OCR'i (oflayn) — faqat macOS'da
+    "apple-vision": ("src.reading.engines.vision", "VisionReader", {}),
     "tesseract-digits-block": (
         "src.reading.engines.tesseract",
         "TesseractReader",
