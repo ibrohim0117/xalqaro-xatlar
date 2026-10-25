@@ -1,7 +1,9 @@
 """B5.3c: sana — bitta xat uchun qo'lyozma OCR: bo'laklar -> OCR'lar -> ovoz -> natija.
 
 Natija (B5.3b o'lchovlari, dev 70, oyna 365 kun):
-  - auto: matn qatlamidan olingan sana — 13/13 (100%); bunda OCR umuman ishlamaydi;
+  - auto: matn qatlamidan olingan sana — 13/13 (100%); B5.12: OCR baribir ishlaydi, lekin faqat
+    raqam uchun (bunday xatlarda ham raqam ko'pincha qo'lda: dev 13 xatda raqam 0 -> 7 to'g'ri
+    yozildi, 2 xato ⚠ bilan; vaqt shu xatlarga ~+38 s); sana takliflari bo'lmaydi;
   - prefill (fields/date_vote.prefill_date): VLM aniq savol bilan header'dan topgan sana, boshqa OCR
     tasdiqlagan — 32/34 (B5.3c-8, X2): maydonga yoziladi, lekin "tekshirish kerak" belgisi bilan
     (sezdirmasdan yozilgan xato sana bo'lmasin). Topuvchi — birinchi ISHLAGAN OCR: aniq savol
@@ -65,8 +67,7 @@ class DateOcr:
 
     def read(self, page: pymupdf.Page, first: CachedPage, received: Date) -> DateReading:
         auto = date_and_number(first.text_layer)[0]
-        if in_window(auto, received, WINDOW_DAYS):
-            return DateReading(auto=auto)
+        auto = auto if in_window(auto, received, WINDOW_DAYS) else None
         start = time.perf_counter()
         regions = ocr_regions(first)
         wanted = {name for reader in self.readers for name in crops_for(reader.name)}
@@ -90,9 +91,11 @@ class DateOcr:
             found.append(windowed(engine_dates(texts), received))
             worked.append(reader.name)
             read[reader.name] = texts
+        seconds = time.perf_counter() - start
+        if auto:  # sana bosma — OCR matnlari faqat raqam uchun (B5.12)
+            return DateReading(auto=auto, seconds=seconds, readers=worked, texts=read)
         prefill = prefill_date(found, worked[0] if worked else None)
         suggestions = ranked([{d for d in f.values() if d} for f in found])
-        seconds = time.perf_counter() - start
         return DateReading(None, prefill, suggestions, seconds, worked, read)
 
 

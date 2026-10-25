@@ -125,6 +125,7 @@ def test_main_prints_only_counts(tmp_path, monkeypatch, capsys):
 
     number_failures.main()
     out = capsys.readouterr().out
-    assert "OCR 1 xatda ishlaydi" in out  # DOC_1 da sana matn qatlamida — OCR ishlamaydi
+    assert "OCR hamma xatda" in out  # B5.12: sanasi bosma DOC_1 da ham OCR ishlaydi
+    assert "sanasi bosma (1), eski" in out  # taqqoslash: eski shartda DOC_1 da OCR yo'q
     assert "N6 N1 yoki N3" in out
     assert "55/07" not in out  # ekranga raqam qiymati chiqmaydi

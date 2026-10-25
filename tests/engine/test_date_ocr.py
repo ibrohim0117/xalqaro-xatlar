@@ -37,11 +37,12 @@ def letter(tmp_path):
     return make
 
 
-def test_printed_date_is_automatic_and_ocr_is_skipped(letter):
-    vlm = FakeReader("vlm", "01.01.2026")
+def test_printed_date_is_automatic_and_ocr_reads_for_the_number(letter):
+    vlm = FakeReader("vlm", "01.01.2026 № 55/07-1234")
     reading = DateOcr([vlm]).read(*letter(FAKE_LETTER), RECEIVED)
     assert reading.auto == "12.03.2026" and reading.prefill is None
-    assert vlm.calls == 0  # matn qatlamidan topildi — OCR vaqti tejaldi
+    assert reading.suggestions == []  # sana bosma — OCR sanasi taklif qilinmaydi
+    assert vlm.calls > 0 and "vlm" in reading.texts  # B5.12: OCR matni raqam uchun
 
 
 def test_vlm_confirmed_by_another_ocr_is_prefilled(letter):

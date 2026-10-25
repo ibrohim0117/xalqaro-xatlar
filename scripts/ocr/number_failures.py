@@ -3,9 +3,8 @@ OCR qayta ishlatilmaydi (compare_ocr saqlagan matnlar: outputs/ocr/<OCR>.json).
 
 1) Har OCR va bo'lak (barcha dev xatlarda, saqlangan hamma bo'laklar): nechta raqam berdi, nechtasi
    to'g'ri, nechtasi 1 belgi farq. "matn" — matn qatlami va sahifa OCR'idagi "№" dan keyingi raqam.
-2) Qoidalar — prototip sharti bilan: matn qatlamida sana bor xatlarda sana OCR'i ishlamaydi (VLM
-   raqami ham yo'q); OCR'lar faqat prototip o'qiydigan bo'laklarni (date_ocr.crops_for) beradi;
-   "matn" ham bitta ovoz.
+2) Qoidalar — prototip sharti bilan (B5.12: OCR hamma xatda, sanasi bosma xatlarda ham); OCR'lar
+   faqat prototip o'qiydigan bo'laklarni (date_ocr.crops_for) beradi; "matn" ham bitta ovoz.
      N0 hozirgi: raqam yozilmaydi, bitta taklif (matn qatlami, bo'lmasa sahifa OCR'i);
      N1 matn qatlami raqami (bosma, "№" dan keyin);
      N2 VLM aniq savol — header raqami yolg'iz;
@@ -28,9 +27,9 @@ OCR qayta ishlatilmaydi (compare_ocr saqlagan matnlar: outputs/ocr/<OCR>.json).
    harf -> A; qiymat emas): X — boshqa belgi o'qilgan, _ — tushib qolgan, + — ortiqcha belgi.
    (Birinchi urinish "oxirgi ajratgichdan keyin/oldin" edi — 99/99-99999/99 da oxirgi bo'lak
    "/99", qo'lda yozilgan 99999 esa o'rtada: noto'g'ri xulosa berardi.) Matn qatlami xatolari.
-2b) B5.11: OCR DOIM ishlasa (prototip shartisiz — matn qatlamida sana bor xatlarda ham), qolip
-   bilan, NP qoidasi: hamma xatda va faqat hozir OCR ishlamaydigan xatlarda — hozirgi bilan
-   yonma-yon.
+2b) B5.12: prototip OCR'ni hamma xatda ishlatadi (sanasi bosma xatlarda ham — raqam uchun);
+   taqqoslash uchun eski shart (sanasi bosma xatda OCR yo'q), qolip bilan, NP qoidasi: hamma xatda
+   va faqat sanasi bosma xatlarda.
 5) Qolip bilan N10 to'g'ri yozmagan xatlarda VLM header raqami to'g'risiga nisbatan qanday.
 Ekranga FAQAT sonlar chiqadi; --ids — DOC raqamlari (qiymatlarsiz).
 
@@ -203,8 +202,8 @@ def main() -> None:
     reachable = Counter()  # yuqori chegara: to'g'ri raqam qayerdadir o'qilganmi
     edits, shapes, near = Counter(), Counter(), 0  # VLM header 1–3 belgi farq: turi, joyi, xatlar
     digits_only, text_layer_errors = 0, Counter()
-    used, ocr_ran_count = 0, 0
-    always = Counter()  # (guruh, "hozirgi" | "OCR doim", holat) -> son
+    used = 0
+    always = Counter()  # (guruh, "eski" | "hozirgi", holat) -> son
     for doc_id in dev:
         document = truths[doc_id]
         truth = document.get("hujjat_raqami")
@@ -245,16 +244,15 @@ def main() -> None:
         if text["matn qatlami"] and key(text["matn qatlami"]) != key(truth):
             text_layer_errors[relation(text["matn qatlami"], truth)] += 1
 
-        # 2) prototip sharti: matn qatlamida sana bo'lsa — OCR ishlamaydi; faqat o'z bo'laklari
-        ocr_ran = not in_window(tl_date, received, WINDOW_DAYS)
-        ocr_ran_count += ocr_ran
+        # 2) prototip sharti (B5.12): OCR hamma xatda ishlaydi; har OCR faqat o'z bo'laklarini
+        printed = in_window(tl_date, received, WINDOW_DAYS)  # sana bosma (matn qatlamida)
         own = [
-            {crop: t for crop, t in texts.items() if crop in crops_for(reader)} if ocr_ran else {}
+            {crop: t for crop, t in texts.items() if crop in crops_for(reader)}
             for reader, texts in zip(READERS, raw, strict=True)
         ]
         found = [engine_numbers(texts) for texts in own]
         dates = [windowed(engine_dates(texts), received) for texts in own]
-        vlm_date_ok = ocr_ran and prefill_date(dates, READERS[0]) is not None
+        vlm_date_ok = prefill_date(dates, READERS[0]) is not None
         current = date_number_answer(first)[1].get("hujjat_raqami")
         template = learned[doc_id]
         for variant, use in ((PLAIN, None), (TEMPLATE, template)):
@@ -273,21 +271,18 @@ def main() -> None:
                 else:
                     stats[variant, name, "top3"] += any(key(h) == key(truth) for h in hints)
 
-        # 2b) OCR doim ishlasa — NP, qolip bilan (written, suggestions — qolip bilan variantniki)
-        own_all = [
-            {crop: t for crop, t in texts.items() if crop in crops_for(reader)}
-            for reader, texts in zip(READERS, raw, strict=True)
-        ]
-        found_all = [fit_all(engine_numbers(texts), template) for texts in own_all]
-        text_all = fit_all(text, template)
+        # 2b) eski shart (sanasi bosma xatda OCR yo'q) va hozirgi — NP, qolip bilan
+        nothing = [fit_all(engine_numbers({}), template) for _ in READERS]
+        old_found = nothing if printed else [fit_all(f, template) for f in found]
+        text_t = fit_all(text, template)
         runs = {
-            "hozirgi": (written[NP], suggestions),
-            "OCR doim": (
-                number_reading(READERS, found_all, text_all, template)[0],
-                ranked_numbers([*found_all, text_all]),
+            "eski": (
+                number_reading(READERS, old_found, text_t, template)[0],
+                ranked_numbers([*old_found, text_t]),
             ),
+            "hozirgi": (written[NP], suggestions),
         }
-        for group in ["hamma xat"] + ([] if ocr_ran else ["hozir OCR ishlamaydigan"]):
+        for group in ["hamma xat"] + (["sanasi bosma"] if printed else []):
             always[group, "xat"] += 1
             for run, (value, hints) in runs.items():
                 if value:
@@ -309,7 +304,7 @@ def main() -> None:
             case = "faqat takliflarda"
         else:
             case = "topilmadi"
-        seen = relation(found[0].get("header"), truth) if ocr_ran else "OCR ishlamadi"
+        seen = relation(found[0].get("header"), truth)
         misses[case, seen].append(doc_id)
 
     print(f"Raqam: OCR'lar va qoidalar, dev {used} xat (json'da raqam bor)\n")
@@ -322,10 +317,7 @@ def main() -> None:
         print(f"     {reader:<16}{crop:<14}{answered:>6}{q["to'g'ri"]:>9}{q['1 belgi farq']:>14}")
 
     with_template = sum(t is not None for d, t in learned.items() if truths[d].get("hujjat_raqami"))
-    print(
-        f"\n  2) Qoidalar (prototip sharti; OCR {ocr_ran_count} xatda ishlaydi; "
-        f"qolip {with_template} xatda):"
-    )
+    print(f"\n  2) Qoidalar (prototip sharti: OCR hamma xatda; qolip {with_template} xatda):")
     columns = f"{'yozildi':>8}{'to`g`ri':>8}{'xato':>6}{'jami':>6}"
     print(f"     {'':<30}{PLAIN:^28}  {TEMPLATE:^28}")
     print(f"     {'qoida':<30}{columns}  {columns}")
@@ -337,10 +329,10 @@ def main() -> None:
             cells.append(f"{auto:>8}{ok:>8}{auto - ok:>6}{jami:>6}")
         print(f"     {name:<30}{cells[0]}  {cells[1]}")
 
-    print("\n  2b) OCR doim ishlasa (prototip shartisiz), qolip bilan, NP qoidasi:")
+    print("\n  2b) Sanasi bosma xatlarda OCR: eski (yo'q) va hozirgi (bor), qolip bilan, NP:")
     print(f"     {'':<36}{'yozildi':>8}{'to`g`ri':>8}{'xato':>6}{'jami':>6}")
-    for group in ("hamma xat", "hozir OCR ishlamaydigan"):
-        for run in ("hozirgi", "OCR doim"):
+    for group in ("hamma xat", "sanasi bosma"):
+        for run in ("eski", "hozirgi"):
             cells = "".join(
                 f"{always[group, run, k]:>{w}}"
                 for k, w in (("yozildi", 8), ("to'g'ri", 8), ("xato", 6), ("jami", 6))
