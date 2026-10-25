@@ -52,6 +52,18 @@ def test_signer_found_at_letter_end():
         # "Х" -> "X": dev'da o'girish 46 tadan 43 tasida aynan mos, "x→h" farqi uchramadi
         ([("Ш.Х.", 0.6, 0.8, 0), ("Шарипов", 0.7, 0.8, 0)], "Sh.X.Sharipov"),
         ([("М.", 0.6, 0.8, 0), ("Буркадзе", 0.7, 0.8, 0)], "M.Burkadze"),
+        # B5.9: bosh harf "Е." -> "E." (so'z boshidagi "Ye" emas)
+        ([("Е.П.", 0.6, 0.8, 0), ("Иванов", 0.7, 0.8, 0)], "E.P.Ivanov"),
+        # B5.9: ukraincha harflar
+        ([("І.В.", 0.6, 0.8, 0), ("Шевченко", 0.7, 0.8, 0)], "I.V.Shevchenko"),
+        # B5.9: Ukraina imzosi "Имя ФАМИЛИЯ" — bitta bosh harf ismdan
+        ([("Олена", 0.6, 0.8, 0), ("МЕЛЬНИЧУК", 0.7, 0.8, 0)], "O.Melnichuk"),
+        # B5.9: bosh harf familiyaga yopishgan
+        ([("А.Сидоров", 0.6, 0.8, 0)], "A.Sidorov"),
+        ([("А.Б.Сидоров,", 0.6, 0.8, 0)], "A.B.Sidorov"),
+        # B5.9: PDF matni "А.Б." ni ikkiga bo'lgan; oxirgi nuqta o'rnida vergul
+        ([("А", 0.6, 0.8, 0), (".Б.", 0.62, 0.8, 0), ("Сидоров", 0.7, 0.8, 0)], "A.B.Sidorov"),
+        ([("А.Б,", 0.6, 0.8, 0), ("Сидоров", 0.7, 0.8, 0)], "A.B.Sidorov"),
     ],
 )
 def test_signer_shapes(items, expected):
@@ -71,3 +83,29 @@ def test_recipient_person_in_header_is_not_signer():
     found = candidates([page(1, header)])
     assert choose_signer(found).surname == "Иванову"  # filtrsiz — qabul qiluvchi imzo bo'lib qoladi
     assert choose_signer(found, min_y=0.5) is None  # pastki yarmi sharti bilan — "tekshirish kerak"
+
+
+@pytest.mark.parametrize(
+    "items",
+    [
+        [("Начальник", 0.6, 0.8, 0), ("ОТДЕЛА", 0.7, 0.8, 0)],  # lavozim — ism emas
+        [("Олена", 0.6, 0.78, 0), ("МЕЛЬНИЧУК", 0.6, 0.8, 1)],  # ism boshqa qatorda
+        [("Олена", 0.6, 0.8, 0), ("Мельничук", 0.7, 0.8, 0)],  # familiya katta harfda emas
+        # gap ichida: katta harfli so'zdan keyin yana so'z bor — imzo emas
+        [("Республики", 0.6, 0.8, 0), ("УЗБЕКИСТАН", 0.7, 0.8, 0), ("сообщаем", 0.8, 0.8, 0)],
+        # yolg'iz katta harf (".Б." siz) — bosh harf emas: "В Министерство"
+        [("В", 0.6, 0.8, 0), ("Министерство", 0.7, 0.8, 0)],
+    ],
+)
+def test_given_name_rule_needs_caps_surname_on_same_line(items):
+    assert choose_signer(candidates([page(1, items)])) is None
+
+
+def test_lost_first_initial_is_marked_damaged():
+    items = [("А", 0.6, 0.8, 0), (".Б.", 0.62, 0.8, 0), ("Сидоров", 0.7, 0.8, 0)]
+    split = candidates([page(1, items)])
+    assert not split[0].damaged  # "А" ".Б." — ikkala bosh harf bor
+    for first in (".Б.", ",Б."):
+        lost = candidates([page(1, [(first, 0.62, 0.8, 0), ("Сидоров", 0.7, 0.8, 0)])])
+        assert lost[0].damaged and lost[0].latin() == "B.Sidorov"
+    assert not candidates([page(1, [("А.Б.", 0.6, 0.8, 0), ("Сидоров", 0.7, 0.8, 0)])])[0].damaged

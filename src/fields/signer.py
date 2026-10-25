@@ -31,8 +31,17 @@ def format_signer(initials: list[str], surname: str) -> str:
 # ── B5.2b: imzoni xatdan topish ──
 # dev: imzo 46 tadan 45 tasida o'ng yarmida, 39 tasida "И.О. Фамилия" shaklida ("Фамилия И.О." — 0).
 # Fuqaro ismlari odatda "Иванов П.С." yoki to'liq yoziladi — oldindagi bosh harf imzoni ajratadi.
-INITIALS_TOKEN = re.compile(r"(?:[А-ЯЁЎҚҒҲ]\.){1,2}")  # "А.Б." yoki "А." ("А. Б." — ikki so'z)
-SURNAME_TOKEN = re.compile(r"[А-ЯЁЎҚҒҲ](?:[а-яёўқғҳ]+|[А-ЯЁЎҚҒҲ]+)(?:-[А-ЯЁ][а-яёА-ЯЁ]+)?")
+UPPER, LOWER = "А-ЯЁЎҚҒҲІЇЄҐ", "а-яёўқғҳіїєґ"  # rus, o'zbek va ukrain kirill harflari
+# "А.Б." yoki "А." ("А. Б." — ikki so'z). B5.9 (dev): PDF matni "А.Б." ni "А" va ".Б." ga bo'lgan
+# (2 xat) va oxirgi nuqta o'rnida vergul "А.Б," (1 xat) — ".Б." va "А.Б" ham bosh harf
+INITIALS_TOKEN = re.compile(rf"\.?(?:[{UPPER}]\.){{1,2}}|[{UPPER}]\.[{UPPER}]")
+BARE_INITIAL = re.compile(rf"[{UPPER}]")  # faqat ".Б." oldida: "А" ".Б." (yolg'iz "В" — so'z)
+SURNAME_TOKEN = re.compile(rf"[{UPPER}](?:[{LOWER}]+|[{UPPER}]+)(?:-[{UPPER}][{LOWER}{UPPER}]+)?")
+# B5.9 (dev 4 xat): bosh harf familiyaga yopishgan — "А.Сидоров", "А.Б.Сидоров"
+GLUED = re.compile(rf"((?:[{UPPER}]\.){{1,2}})({SURNAME_TOKEN.pattern})")
+# B5.9: Ukraina imzosi "Олена МЕЛЬНИЧУК" — ism va KATTA familiya; json'da 1 bosh harf (dev 4/4)
+GIVEN_NAME = re.compile(rf"[{UPPER}][{LOWER}]{{2,}}")
+TITLE = re.compile(r"начальник|заместител|директор|руководител|министр|председател|консул|глава")
 EDGE = re.compile(r"^[^\wЁё]+|[^\wЁё]+$")
 RIGHT_HALF = 0.5
 # B5.2b (dev): faqat 1-sahifa (2-sahifa va ilovalarda boshqa odamlar imzosi bor: V1 64%, V4 43%),
@@ -51,11 +60,21 @@ class Candidate:
     surname: str  # kirill: "Сидоров"
     # bosh harflar + familiya egallagan joy (x0, y0, x1, y1) — xodimga ko'rsatish uchun
     box: tuple[float, float, float, float] = field(default=(0.0, 0.0, 0.0, 0.0), compare=False)
+    # B5.9: bosh harflar ".Б." yoki ",Б." bilan boshlanadi, oldidagi harf matnda yo'q — birinchi
+    # bosh harf PDF matnida yo'qolgan (dev 3/3 xato edi) -> yoziladi, lekin "tekshiring"
+    damaged: bool = field(default=False, compare=False)
 
     def latin(self) -> str:
         """json shakli: "A.B.Sidorov". Katta harfli "СИДОРОВ" ham shu ko'rinishga keladi."""
         surname = self.surname.capitalize() if self.surname.isupper() else self.surname
-        return format_signer([to_latin(i) for i in self.initials], to_latin(surname))
+        return format_signer([initial_latin(i) for i in self.initials], to_latin(surname))
+
+
+def initial_latin(letter: str) -> str:
+    """Bosh harf lotinda. B5.9: "Е." xodimlar "E." deb yozadi (so'z boshidagi "Ye" emas; dev: 3 xato
+    shundan edi)."""
+    latin = to_latin(letter)
+    return "E" if latin == "Ye" else latin
 
 
 def candidates(pages: list[CachedPage], max_pages: int | None = 2) -> list[Candidate]:
@@ -65,9 +84,15 @@ def candidates(pages: list[CachedPage], max_pages: int | None = 2) -> list[Candi
         words = page.main.words
         for i, word in enumerate(words):
             surname = EDGE.sub("", word.text)
-            if not SURNAME_TOKEN.fullmatch(surname):
+            if glued := GLUED.fullmatch(surname):
+                initials, start = re.findall(rf"[{UPPER}]", glued.group(1)), i
+                surname = glued.group(2)
+            elif not SURNAME_TOKEN.fullmatch(surname):
                 continue
-            initials, start = initials_before(words, i)
+            else:
+                initials, start = initials_before(words, i)
+                if not initials:
+                    initials, start = given_name_before(words, i)
             if initials:
                 used = words[start : i + 1]
                 box = (
@@ -76,10 +101,26 @@ def candidates(pages: list[CachedPage], max_pages: int | None = 2) -> list[Candi
                     max(w.x1 for w in used),
                     max(w.y1 for w in used),
                 )
+                damaged = words[start].text[:1] in ".,"
                 found.append(
-                    Candidate(page.number, word.x0, word.y0, tuple(initials), surname, box)
+                    Candidate(page.number, word.x0, word.y0, tuple(initials), surname, box, damaged)
                 )
     return found
+
+
+def given_name_before(words: list[Word], i: int) -> tuple[list[str], int]:
+    """ "Олена МЕЛЬНИЧУК": familiya KATTA harfda, oldida (shu qatorda) ism — bosh harfi ismdan.
+    Lavozim so'zi ("Начальник ОТДЕЛА") ism emas. Familiya qatordagi oxirgi so'z bo'lishi kerak:
+    dev'da imzo 4/4 shunday, gap ichidagi "Республики УЗБЕКИСТАН ..." esa imzo bo'lib qolgan edi."""
+    surname = EDGE.sub("", words[i].text)
+    last_on_line = i + 1 == len(words) or words[i + 1].line != words[i].line
+    if i == 0 or not surname.isupper() or not last_on_line:
+        return [], i
+    prev = words[i - 1]
+    name = EDGE.sub("", prev.text)
+    if prev.line != words[i].line or not GIVEN_NAME.fullmatch(name) or TITLE.search(name.lower()):
+        return [], i
+    return [name[0]], i - 1
 
 
 def initials_before(words: list[Word], i: int) -> tuple[list[str], int]:
@@ -93,7 +134,13 @@ def initials_before(words: list[Word], i: int) -> tuple[list[str], int]:
         prev = words[j]
         if prev.line != words[i].line or not INITIALS_TOKEN.fullmatch(prev.text.strip(",")):
             break
-        initials = re.findall(r"[А-ЯЁЎҚҒҲ]", prev.text) + initials
+        initials = re.findall(rf"[{UPPER}]", prev.text) + initials  # "І.В." ham
+        j -= 1
+    # "А" ".Б." — bo'lingan "А.Б.": ".Б." oldidagi yolg'iz katta harf ham bosh harf
+    first = words[j + 1]
+    split = initials and first.text.startswith(".") and j >= 0 and words[j].line == first.line
+    if split and BARE_INITIAL.fullmatch(words[j].text):
+        initials = [words[j].text] + initials
         j -= 1
     return initials[-2:], j + 1
 

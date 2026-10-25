@@ -43,8 +43,9 @@ CYR2LAT = {
     "п": "p", "р": "r", "с": "s", "т": "t", "у": "u", "ф": "f", "х": "x", "ц": "ts",
     "ч": "ch", "ш": "sh", "щ": "sh", "ъ": "", "ы": "i", "ь": "", "э": "e", "ю": "yu",
     "я": "ya", "ў": "o'", "қ": "q", "ғ": "g'", "ҳ": "h",
+    "і": "i", "ї": "yi", "є": "ye", "ґ": "g",  # ukraincha (B5.9: Ukraina xatlari imzosi)
 }  # fmt: skip
-VOWELS = set("аеёиоуыэюяў")
+VOWELS = set("аеёиоуыэюяўіїє")
 
 
 def to_latin(word: str) -> str:

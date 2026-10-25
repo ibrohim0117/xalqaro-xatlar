@@ -153,6 +153,17 @@ def test_predict_signer_from_letter_end():
     assert "imzolagan_shaxs" not in answer["tekshirish_kerak"]
 
 
+def test_signer_with_lost_initial_is_written_but_flagged():
+    words = [
+        Word("тел.", 0.1, 0.78, 0.15, 0.79, 0),  # boshqa qator — yo'qolgan bosh harf emas
+        Word(".Б.", 0.7, 0.8, 0.74, 0.81, 1),
+        Word("Сидоров", 0.75, 0.8, 0.85, 0.81, 1),
+    ]
+    answer = predict([CachedPage(1, PageText(1, "text_layer", words), None)], MODEL)
+    assert answer["rekvizit_document"]["imzolagan_shaxs"] == "B.Sidorov"
+    assert "imzolagan_shaxs" in answer["tekshirish_kerak"]
+
+
 def test_missing_signer_is_flagged():
     answer = predict(pages_of("Ферганская область"), MODEL)
     assert answer["rekvizit_document"]["imzolagan_shaxs"] is None

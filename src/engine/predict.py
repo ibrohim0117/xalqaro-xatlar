@@ -69,6 +69,8 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
     signer = find_signer(pages)
     if signer:
         rekvizit["imzolagan_shaxs"] = signer.latin()
+        if signer.damaged:  # birinchi bosh harf PDF matnida yo'qolgan bo'lishi mumkin
+            flags.append("imzolagan_shaxs")
     else:  # imzo matnda o'qilmagan (qo'lda, shtamp) yoki shakli boshqacha
         flags.append("imzolagan_shaxs")
     # Sana: matn qatlamidan topilsa avtomatik; raqam — doim xodim tekshiradi (faqat taklif)
