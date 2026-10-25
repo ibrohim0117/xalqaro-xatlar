@@ -6,8 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from src.fields.signer import find_signer
 from src.reading.engines import make_reader
-from src.reading.engines.vision import group_lines
+from src.reading.engines.vision import group_lines, to_words
+from src.reading.pages import CachedPage
+from src.reading.pdf_text import PageText
 
 FONT = Path("/System/Library/Fonts/Supplemental/Arial.ttf")
 
@@ -37,3 +40,15 @@ def test_vision_reads_a_printed_line():
     lines = text.splitlines()
     assert "55/07-1234" in lines[0] and "12.03.2026" in lines[0]
     assert "05.12.2025" in lines[1]
+
+
+def test_to_words_places_words_on_the_page():
+    # pastki yarmidagi bo'lak: "Начальник" chapda, "А.Б. Сидоров" o'ngda (alohida bo'laklar)
+    found = [(0.40, 0.05, 0.04, 0.20, "Начальник"), (0.40, 0.60, 0.04, 0.30, "А.Б. Сидоров")]
+    words = to_words(found, region=(0.0, 0.5, 1.0, 1.0))
+    assert [w.text for w in words] == ["Начальник", "А.Б.", "Сидоров"]
+    initials = words[1]
+    assert initials.y0 == pytest.approx(0.70) and initials.x0 == pytest.approx(0.60)
+    assert words[2].x0 > initials.x1 > initials.x0 and words[1].line == words[2].line
+    page = CachedPage(1, PageText(1, "ocr", words), None)
+    assert find_signer([page]).latin() == "A.B.Sidorov"  # o'sha imzo qoidasi ishlaydi

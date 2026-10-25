@@ -6,7 +6,13 @@ number_vote buni taniydi. Qo'lyozma raqamlarni VLM'dan yaxshiroq o'qiydimi — o
 (compare_ocr, number_failures).
 """
 
+import re
+
+from src.reading.pdf_text import Word
+
 LANGUAGES = ("ru-RU", "uk-UA", "en-US")
+# Vision bo'lagi (0..1): yuqoridan, chapdan, balandlik, kenglik, matn
+Observation = tuple[float, float, float, float, str]
 
 
 def group_lines(boxes: list[tuple[float, float, float, str]]) -> list[str]:
@@ -23,6 +29,24 @@ def group_lines(boxes: list[tuple[float, float, float, str]]) -> list[str]:
     return [" ".join(text for _, _, _, text in sorted(line, key=lambda b: b[1])) for line in lines]
 
 
+def to_words(
+    found: list[Observation], region: tuple[float, float, float, float] = (0.0, 0.0, 1.0, 1.0)
+) -> list[Word]:
+    """Vision bo'laklari -> sahifa koordinatalaridagi so'zlar (imzo qoidasi shular bilan ishlaydi).
+    region — rasm sahifaning qaysi qismi (x0, y0, x1, y1; 0..1). Har bo'lak — bitta qator; so'z
+    o'rni bo'lak ichidagi harflar ulushi bo'yicha (taxminiy)."""
+    rx0, ry0, rx1, ry1 = region
+    sx, sy = rx1 - rx0, ry1 - ry0
+    words = []
+    for line, (top, left, height, width, text) in enumerate(sorted(found)):
+        total = max(len(text), 1)
+        for m in re.finditer(r"\S+", text):
+            x0, x1 = left + width * m.start() / total, left + width * m.end() / total
+            box = (rx0 + x0 * sx, ry0 + top * sy, rx0 + x1 * sx, ry0 + (top + height) * sy)
+            words.append(Word(m[0], *box, line))
+    return words
+
+
 class VisionReader:
     name = "apple-vision"
 
@@ -36,6 +60,11 @@ class VisionReader:
         self.languages, self.correction = list(languages), correction
 
     def read(self, png: bytes) -> str:
+        found = self.observations(png)
+        return "\n".join(group_lines([(t, x, h, text) for t, x, h, _, text in found]))
+
+    def observations(self, png: bytes) -> list[Observation]:
+        """Rasmdagi matn bo'laklari joylashuvi bilan (0..1, boshi — yuqori chap burchak)."""
         vision = self._vision
         with self._objc.autorelease_pool():  # har chaqiruvdan keyin macOS obyektlari bo'shatiladi
             data = self._nsdata.dataWithBytes_length_(png, len(png))
@@ -54,5 +83,5 @@ class VisionReader:
                     box = observation.boundingBox()  # 0..1, boshi — pastki chap burchak
                     top = 1 - box.origin.y - box.size.height
                     text = str(candidates[0].string())
-                    boxes.append((top, box.origin.x, box.size.height, text))
-        return "\n".join(group_lines(boxes))
+                    boxes.append((top, box.origin.x, box.size.height, box.size.width, text))
+        return boxes

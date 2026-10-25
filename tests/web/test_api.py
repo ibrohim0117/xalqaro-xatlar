@@ -120,6 +120,9 @@ class FakeDateOcr:
         self.received = received
         return DateReading(None, "12.03.2026", ["12.03.2026", "13.03.2026"], 1.5, ["vlm", "rapid"])
 
+    def reader(self, name):
+        return None  # Vision yo'q — imzo matn qoidasidan
+
 
 @needs_tesseract
 def test_prefilled_date_with_suggestions(tmp_path):

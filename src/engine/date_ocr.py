@@ -74,6 +74,10 @@ class DateOcr:
     def __init__(self, readers: list[LineReader]):
         self.readers = readers
 
+    def reader(self, name: str) -> LineReader | None:
+        """Shu nomdagi OCR (masalan, imzo uchun Apple Vision) — yuklangan bo'lsa."""
+        return next((r for r in self.readers if r.name == name), None)
+
     def read(self, page: pymupdf.Page, first: CachedPage, received: Date) -> DateReading:
         auto = date_and_number(first.text_layer)[0]
         auto = auto if in_window(auto, received, WINDOW_DAYS) else None
