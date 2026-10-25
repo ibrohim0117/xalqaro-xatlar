@@ -6,8 +6,10 @@ sanalar TO'PLAMI bilan bitta ovoz beradi. Qoida (dev 70, oyna 365):
     ko'rgan bo'lsa. VLM aniq savol bilan (B5.3c-8, X2): 34 tadan 32 to'g'ri; VLM ko'chirish
     (B5.3b-6): 28 tadan 27. Shuning uchun avtomatik EMAS, "tekshiring" belgisi bilan yoziladi;
   - takliflar (ranked): ko'proq OCR ko'rgan 3 ta sana;
-  - oyna (in_window): sana kelgan kundan oldin va ko'pi bilan 365 kun oldin (dev'da 9..97 kun) —
-    xato o'qilgan yil ("2015") chetlanadi.
+  - oyna (in_window): sana kelgan kundan oldin va ko'pi bilan 365 kun oldin (dev'da 9..97 kun);
+  - B5.11 yil tuzatish (fix_year): oynadan tashqaridagi sanada kun va oy o'sha qoladi, yil —
+    oynaga tushadigani ("12.03.2016" -> "12.03.2026"). VLM ko'p xatoni yilda qiladi: dev'da
+    to'g'ri yozilgan 45 -> 53, xato 2 -> 2, bir bosishda 59 -> 62 (oyna 120 kun bo'lsa ham bir xil).
 """
 
 import re
@@ -114,11 +116,25 @@ def in_window(value: str | None, received: Date | None, days: int | None) -> boo
     return day is not None and 0 <= (received - day).days <= days
 
 
+def fix_year(value: str | None, received: Date | None, days: int | None) -> str | None:
+    """Oynadagi sana — o'zi. Oynadan tashqaridagisida yil tuzatiladi: kun va oy o'sha, yil — kelgan
+    yil yoki undan oldingisi, oynaga tushadigan BITTASI; bunday yil bo'lmasa — None."""
+    if in_window(value, received, days) or value is None:
+        return value
+    parts = value.split(".")
+    if len(parts) != 3:
+        return None
+    options = [f"{parts[0]}.{parts[1]}.{year}" for year in (received.year, received.year - 1)]
+    fits = [o for o in options if in_window(o, received, days)]
+    return fits[0] if len(fits) == 1 else None
+
+
 def windowed(
     found: dict[str, str | None], received: Date | None, days: int | None = WINDOW_DAYS
 ) -> dict[str, str | None]:
-    """Nomzodlardan oynadan tashqaridagilarni olib tashlaydi (None qiladi)."""
-    return {k: (v if in_window(v, received, days) else None) for k, v in found.items()}
+    """Nomzodlar oynaga solinadi: oynadagisi qoladi, tashqaridagisida yil tuzatiladi (fix_year),
+    tuzatib bo'lmasa — None."""
+    return {k: fix_year(v, received, days) for k, v in found.items()}
 
 
 def self_confirmed(

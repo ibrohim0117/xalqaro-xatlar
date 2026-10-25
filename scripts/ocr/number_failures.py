@@ -28,6 +28,9 @@ OCR qayta ishlatilmaydi (compare_ocr saqlagan matnlar: outputs/ocr/<OCR>.json).
    harf -> A; qiymat emas): X — boshqa belgi o'qilgan, _ — tushib qolgan, + — ortiqcha belgi.
    (Birinchi urinish "oxirgi ajratgichdan keyin/oldin" edi — 99/99-99999/99 da oxirgi bo'lak
    "/99", qo'lda yozilgan 99999 esa o'rtada: noto'g'ri xulosa berardi.) Matn qatlami xatolari.
+2b) B5.11: OCR DOIM ishlasa (prototip shartisiz — matn qatlamida sana bor xatlarda ham), qolip
+   bilan, NP qoidasi: hamma xatda va faqat hozir OCR ishlamaydigan xatlarda — hozirgi bilan
+   yonma-yon.
 5) Qolip bilan N10 to'g'ri yozmagan xatlarda VLM header raqami to'g'risiga nisbatan qanday.
 Ekranga FAQAT sonlar chiqadi; --ids — DOC raqamlari (qiymatlarsiz).
 
@@ -201,6 +204,7 @@ def main() -> None:
     edits, shapes, near = Counter(), Counter(), 0  # VLM header 1–3 belgi farq: turi, joyi, xatlar
     digits_only, text_layer_errors = 0, Counter()
     used, ocr_ran_count = 0, 0
+    always = Counter()  # (guruh, "hozirgi" | "OCR doim", holat) -> son
     for doc_id in dev:
         document = truths[doc_id]
         truth = document.get("hujjat_raqami")
@@ -269,6 +273,31 @@ def main() -> None:
                 else:
                     stats[variant, name, "top3"] += any(key(h) == key(truth) for h in hints)
 
+        # 2b) OCR doim ishlasa — NP, qolip bilan (written, suggestions — qolip bilan variantniki)
+        own_all = [
+            {crop: t for crop, t in texts.items() if crop in crops_for(reader)}
+            for reader, texts in zip(READERS, raw, strict=True)
+        ]
+        found_all = [fit_all(engine_numbers(texts), template) for texts in own_all]
+        text_all = fit_all(text, template)
+        runs = {
+            "hozirgi": (written[NP], suggestions),
+            "OCR doim": (
+                number_reading(READERS, found_all, text_all, template)[0],
+                ranked_numbers([*found_all, text_all]),
+            ),
+        }
+        for group in ["hamma xat"] + ([] if ocr_ran else ["hozir OCR ishlamaydigan"]):
+            always[group, "xat"] += 1
+            for run, (value, hints) in runs.items():
+                if value:
+                    ok = key(value) == key(truth)
+                    always[group, run, "yozildi"] += 1
+                    always[group, run, "to'g'ri" if ok else "xato"] += 1
+                    always[group, run, "jami"] += ok
+                else:
+                    always[group, run, "jami"] += any(key(h) == key(truth) for h in hints)
+
         # 5) qolip bilan N10 to'g'ri yozmagan xatlar: VLM header'da nima ko'rgan (written,
         # suggestions — oxirgi, ya'ni qolip bilan variantniki)
         best = written[N10]
@@ -308,6 +337,15 @@ def main() -> None:
             cells.append(f"{auto:>8}{ok:>8}{auto - ok:>6}{jami:>6}")
         print(f"     {name:<30}{cells[0]}  {cells[1]}")
 
+    print("\n  2b) OCR doim ishlasa (prototip shartisiz), qolip bilan, NP qoidasi:")
+    print(f"     {'':<36}{'yozildi':>8}{'to`g`ri':>8}{'xato':>6}{'jami':>6}")
+    for group in ("hamma xat", "hozir OCR ishlamaydigan"):
+        for run in ("hozirgi", "OCR doim"):
+            cells = "".join(
+                f"{always[group, run, k]:>{w}}"
+                for k, w in (("yozildi", 8), ("to'g'ri", 8), ("xato", 6), ("jami", 6))
+            )
+            print(f"     {f'{group} ({always[group, "xat"]}), {run}':<36}{cells}")
     print(f"\n  3) Yuqori chegara ({used} xat): to'g'ri raqam o'qilgan —")
     for where, n in reachable.items():
         print(f"     {where}: {n}")

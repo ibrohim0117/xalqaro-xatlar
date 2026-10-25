@@ -5,12 +5,14 @@ from datetime import date
 from src.fields.date_vote import (
     confirmed,
     engine_dates,
+    fix_year,
     header_anchor_date,
     in_window,
     only_candidate,
     ranked,
     self_confirmed,
     vote,
+    windowed,
 )
 
 
@@ -101,3 +103,27 @@ def test_self_confirmation_with_whole_page():
     assert found["page"] == "12.03.2026"
     assert self_confirmed([found]) is None  # standart: date/line bilan solishtiriladi
     assert self_confirmed([found], others=("line", "page")) == "12.03.2026"
+
+
+def test_fix_year_keeps_day_and_month_and_picks_the_year_in_the_window():
+    received = date(2026, 3, 20)
+    assert fix_year("12.03.2026", received, 365) == "12.03.2026"  # oynada — o'zi
+    assert fix_year("12.03.2016", received, 365) == "12.03.2026"  # yil xato o'qilgan
+    assert fix_year("12.03.2027", received, 365) == "12.03.2026"  # kelajakdagi yil
+    assert fix_year("25.12.2016", received, 365) == "25.12.2025"  # o'tgan yil oxiri
+    assert fix_year("25.06.2016", received, 120) is None  # 0..120 kunga tushmaydi
+    assert fix_year("20.03.2016", received, 365) is None  # 2026 ham, 2025 ham oynada — noaniq
+    assert fix_year("31.02.2016", received, 365) is None  # bunday sana yo'q
+    assert fix_year("12.03.2016", None, 365) == "12.03.2016"  # kelgan sana yo'q — tekshiruvsiz
+    assert fix_year(None, received, 365) is None
+
+
+def test_windowed_fixes_years_and_drops_the_rest():
+    received = date(2026, 3, 20)
+    found = {"header": "12.03.2016", "date": "12.03.2026", "page": None, "line": "25.06.2016"}
+    assert windowed(found, received, 120) == {
+        "header": "12.03.2026",
+        "date": "12.03.2026",
+        "page": None,
+        "line": None,
+    }

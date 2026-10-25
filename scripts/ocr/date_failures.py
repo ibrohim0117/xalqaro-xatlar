@@ -6,6 +6,8 @@ matn qatlami -> auto; topuvchi VLM + tasdiq -> ⚠; 3 taklif; oyna 365) to'rt ho
 tushadi: yozildi to'g'ri / yozildi xato / faqat takliflarda / topilmadi.
 To'g'ri yozilmaganlarda — 1-OCR (VLM) har bo'lakda to'g'ri sanaga nisbatan qanday
 (explain_dates.relation; compare_ocr saqlagan barcha bo'laklar).
+B5.11: prototip yilni tuzatadi (date_vote.fix_year); taqqoslash uchun "yil tuzatishsiz" (eski
+qoida — oynadan tashqaridagi sana tashlab yuboriladi) holatlari va qaysi xatlar o'zgargani.
 Ekranga FAQAT sonlar chiqadi; --ids — "topilmadi" xatlarning DOC raqamlari (qo'lda ko'rish uchun).
 
 Ishga tushirish: poetry run python -m scripts.ocr.date_failures [--ids]
@@ -43,11 +45,20 @@ def outcome(
     received,
     finder: str = READERS[0],
     patterns=OCR_PATTERNS,
+    fix_years: bool = True,
 ) -> str:
-    """Prototip qoidasi bilan bu xatda sana qaysi holatga tushadi (texts[0] — finder OCR'i)."""
+    """Prototip qoidasi bilan bu xatda sana qaysi holatga tushadi (texts[0] — finder OCR'i).
+    fix_years=False — eski qoida: oynadan tashqaridagi sana tuzatilmaydi, tashlab yuboriladi."""
     if in_window(text_layer, received, WINDOW_DAYS):
         return "yozildi to'g'ri" if text_layer == truth else "yozildi xato"
-    found = [windowed(engine_dates(t, patterns), received) for t in texts]
+    found = [engine_dates(t, patterns) for t in texts]
+    if fix_years:
+        found = [windowed(f, received) for f in found]
+    else:  # eski qoida: oynadan tashqaridagi sana — nomzod emas
+        found = [
+            {k: v if in_window(v, received, WINDOW_DAYS) else None for k, v in f.items()}
+            for f in found
+        ]
     if prefill := prefill_date(found, finder):
         return "yozildi to'g'ri" if prefill == truth else "yozildi xato"
     return (
@@ -68,6 +79,8 @@ def main() -> None:
     dev = sorted(load_split()["dev"])
     saved = {r: json.loads((OUT_DIR / f"{r}.json").read_text(encoding="utf-8")) for r in READERS}
     cases, anchors, vlm = Counter(), Counter(), Counter()
+    unfixed = Counter()  # yil tuzatishsiz (eski qoida) holatlari
+    moved = defaultdict(list)  # "tuzatishsiz -> hozirgi" -> DOC raqamlari
     for doc_id in dev:
         document = load_truth(letters[doc_id]).get("rekvizit_document") or {}
         truth, received = document.get("hujjat_sana"), to_day(document.get("kirish_sana"))
@@ -81,6 +94,10 @@ def main() -> None:
         text_layer = date_and_number(first.text_layer)[0]
         case = outcome(texts, text_layer, truth, received)
         cases[case] += 1
+        before = outcome(texts, text_layer, truth, received, fix_years=False)
+        unfixed[before] += 1
+        if before != case:
+            moved[f"{before} -> {case}"].append(doc_id)
         old = outcome(texts, text_layer, truth, received, patterns=DATE_PATTERNS)
         if args.diff and old != case:
             changed.append(f"{doc_id}: {old} -> {case}")
@@ -107,6 +124,13 @@ def main() -> None:
         for crop in CROPS:
             row = ", ".join(f"{k} {vlm[case, crop, k]}" for k in kinds if vlm[case, crop, k])
             print(f"    {crop:<7} {row}")
+
+    print("\n  Yil tuzatish (B5.11) — tuzatishsiz bilan taqqoslash:")
+    print(f"    {'':<20}" + "".join(f"{case:>20}" for case in OUTCOMES))
+    for label, counts in (("yil tuzatishsiz", unfixed), ("hozirgi", cases)):
+        print(f"    {label:<20}" + "".join(f"{counts[case]:>20}" for case in OUTCOMES))
+    for change, docs in sorted(moved.items()):
+        print(f"    {change} ({len(docs)}): {', '.join(docs)}")
 
     if args.ids:
         print("\n  Topilmagan xatlar (VLM header'da nima ko'rgan, \"№\" qatori):")

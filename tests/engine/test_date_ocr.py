@@ -60,10 +60,11 @@ def test_disagreement_gives_only_suggestions(letter):
     assert set(reading.suggestions) == {"12.03.2026", "13.03.2026"}
 
 
-def test_misread_year_is_outside_the_window(letter):
+def test_misread_year_is_fixed_into_the_window(letter):
+    # B5.11: kun va oy o'sha, yil — oynaga tushadigani; baribir "tekshiring" bilan (prefill)
     readers = [FakeReader("vlm", "12.03.2015"), FakeReader("rapid", "12.03.2015")]
     reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
-    assert reading.prefill is None and reading.suggestions == []
+    assert reading.prefill == "12.03.2026" and reading.auto is None
 
 
 def test_broken_vlm_falls_back_to_vote(letter):
