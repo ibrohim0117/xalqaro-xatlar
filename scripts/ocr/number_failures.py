@@ -49,6 +49,7 @@ from scripts.ocr.fit_numbers import templates
 from src.engine.date_ocr import DEFAULT_READERS, crops_for
 from src.evaluation.dataset import list_letters, load_split, load_truth
 from src.evaluation.text_cache import get_pages
+from src.fields import number_template
 from src.fields.date_number import date_and_number, date_number_answer
 from src.fields.date_vote import (
     WINDOW_DAYS,
@@ -203,7 +204,15 @@ def rules(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--ids", action="store_true", help="xato va topilmagan DOC raqamlari")
+    parser.add_argument(
+        "--max-prefix-edit",
+        type=int,
+        help="qolip bosh qismni shuncha belgigacha farqda almashtirsin (yo'q — kod qiymati)",
+    )
     args = parser.parse_args()
+    if args.max_prefix_edit is not None:
+        number_template.MAX_PREFIX_EDIT = args.max_prefix_edit
+    print(f"Qolip bosh qism chegarasi: {number_template.MAX_PREFIX_EDIT or 'cheklovsiz'}")
     letters = {letter.doc_id: letter for letter in list_letters()}
     dev = sorted(load_split()["dev"])
     saved = {r: json.loads((OUT_DIR / f"{r}.json").read_text(encoding="utf-8")) for r in READERS}

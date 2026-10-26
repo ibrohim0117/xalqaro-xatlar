@@ -11,9 +11,16 @@ import re
 from collections import Counter
 from dataclasses import dataclass
 
+from rapidfuzz.distance import Levenshtein
+
 from src.common.text import normalize
 
 SEPARATORS = "/-._\\"
+# Bosh qism faqat o'qilgani tashkilotnikidan shuncha belgigacha farq qilsa almashtiriladi (OCR).
+# Ko'proq farq — boshqa raqam (yangi xatlar: bo'lim kodi o'zgargan, qolip to'g'ri o'qilgan bosma
+# raqamni buzgan). None — cheklovsiz (B5.5 dagi qoida). O'lchov (number_failures --max-prefix-edit,
+# dev 70, NP qolip bilan): cheklovsiz 29/23/6/40, 2 — aynan bir xil, 1 — 28/22/6/38 (kamaydi)
+MAX_PREFIX_EDIT: int | None = 2
 PART = re.compile(r"[/\-._\\]|[^/\-._\\]+")  # bo'laklar: "54", "/", "07", "-", …
 
 
@@ -97,8 +104,14 @@ def fit(number: str, template: Template) -> str:
         return value
     head = PART.findall(template.prefix)
     parts = PART.findall(value)
-    if structure(value) == template.structure and all(
-        len(a) == len(b) for a, b in zip(parts, head, strict=False)
+    read_head = "".join(parts[: len(head)])
+    close = MAX_PREFIX_EDIT is None or (
+        Levenshtein.distance(read_head, template.prefix) <= MAX_PREFIX_EDIT
+    )
+    if (
+        close
+        and structure(value) == template.structure
+        and all(len(a) == len(b) for a, b in zip(parts, head, strict=False))
     ):
         return template.prefix + "".join(parts[len(head) :])
     if bare(value).startswith(bare(template.prefix)):

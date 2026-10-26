@@ -34,3 +34,14 @@ def test_matches_needs_structure_and_prefix():
     assert matches("54/07-12345/25", template)
     assert not matches("17/08-10/2934", template)  # boshqa raqam ("На №" yoki nusxa)
     assert not matches("55/07-12345/25", template)  # bosh qism boshqa
+
+
+def test_prefix_is_replaced_only_when_close(monkeypatch):
+    from src.fields import number_template
+
+    template = Template("9/9-9/9", "12/07-84/")
+    monkeypatch.setattr(number_template, "MAX_PREFIX_EDIT", None)
+    assert fit("24/07-85/725", template) == "12/07-84/725"  # cheklovsiz: to'g'ri raqam buziladi
+    monkeypatch.setattr(number_template, "MAX_PREFIX_EDIT", 2)
+    assert fit("24/07-85/725", template) == "24/07-85/725"  # 3 belgi farq — boshqa raqam
+    assert fit("12/01-84/725", template) == "12/07-84/725"  # 1 belgi farq — OCR xatosi tuzatiladi
