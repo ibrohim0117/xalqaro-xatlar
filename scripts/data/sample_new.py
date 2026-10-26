@@ -5,7 +5,9 @@ keyin kattaroq N olinsa, avvalgi xatlar ham ichida bo'ladi, qolganlari esa hali 
 keyingi o'lchov uchun yopiq. Tartib (faqat DOC raqamlari) outputs/papkalar/real2_tartib.json ga
 yoziladi. Fayllar hardlink (nusxa emas), outputs/ gitignore'da. Ekranga faqat sonlar chiqadi.
 
-Ishga tushirish: poetry run python -m scripts.data.sample_new --n 25
+Ishga tushirish:
+    poetry run python -m scripts.data.sample_new --n 25              # boshidagi 25 ta
+    poetry run python -m scripts.data.sample_new --skip 25 --n 125   # qolgan 125 ta (yakuniy)
 """
 
 import argparse
@@ -30,12 +32,13 @@ def new_root() -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=25, help="nechta xat")
+    parser.add_argument("--skip", type=int, default=0, help="tartib boshidan nechtasini o'tkazish")
     args = parser.parse_args()
     letters = {letter.doc_id: letter for letter in list_letters(new_root())}
     order = sorted(letters)
     random.Random(SEED).shuffle(order)
-    chosen = order[: args.n]
-    out = OUT_DIR / f"real2_{args.n}"
+    chosen = order[args.skip : args.skip + args.n]
+    out = OUT_DIR / (f"real2_{args.n}" if not args.skip else f"real2_qolgan{len(chosen)}")
     for doc_id in chosen:
         letter = letters[doc_id]
         folder = out / doc_id
@@ -44,8 +47,9 @@ def main() -> None:
         link(letter.truth, folder / letter.truth.name)
     ORDER_FILE.parent.mkdir(parents=True, exist_ok=True)
     ORDER_FILE.write_text(json.dumps({"seed": SEED, "tartib": order}, indent=1), encoding="utf-8")
-    print(f"{out}/: {len(chosen)} ta xat ({len(order)} tadan, seed {SEED}, PDF + json)")
-    print(f"Qolgan {len(order) - len(chosen)} ta xat hali ishlatilmagan — keyingi o'lchov uchun.")
+    print(f"{out}/: {len(chosen)} ta xat ({len(order)} tadan, seed {SEED}, {args.skip}-dan)")
+    unused = len(order) - args.skip - len(chosen)
+    print(f"Tartibda keyin yana {unused} ta xat qoldi.")
 
 
 if __name__ == "__main__":
