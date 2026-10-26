@@ -22,3 +22,9 @@ CLAUDE.md
 
 # Model fayllari (katta, gitga kirmaydi; oflayn serverga papka sifatida ko'chiriladi)
 models/
+
+# Yangi xatlar to'plami (real ma'lumot — data/real kabi, gitga kirmaydi)
+data/real2/
+
+# Lokal hujjat (loyiha haqida to'liq ma'lumot, suhbatga tayyorgarlik)
+task.md
