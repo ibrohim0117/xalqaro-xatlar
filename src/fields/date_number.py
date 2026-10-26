@@ -14,9 +14,17 @@ from src.reading.pdf_text import PageText, Word
 
 ANCHOR = re.compile(r"^(?:№|N[°º]|nr\.?)", re.IGNORECASE)  # "№", "№01/301495", "nr.", "N°"
 TRAP_BEFORE = re.compile(r"^(?:на|ha|на№)$", re.IGNORECASE)  # "На № ___ от ___" (ha — OCR lotin)
+# "№" dan oldin, shu qatorda shuncha so'z ichida "на" — "На №", "На ваш исх. №", "на исх. №"
+# (bizning oldingi xatimiz raqami, jo'natuvchiniki emas). Javob xat (reply) ham shuni ishlatadi
+LOOK_BACK = 3
+# Bank rekvizitlari: "б/с № 4402…", "р/с №" — "№" dan keyin hisob raqami (10+ raqam) yoki oldida
+# rekvizit so'zi bo'lsa, bu sana-raqam qatori emas (yangi xatlar: bitta blankda 3 xat adashgan)
+BANK_BEFORE = re.compile(r"^(?:[бркл]/с|а/э|р/сч|сч[её]т|иик|бик|инн|огрн|кпп|окпо|бин|иин)$", re.I)
+ACCOUNT = re.compile(r"\d{10,}")
 ANCHOR_MAX_Y = 0.5  # langar sahifaning yuqori yarmida (dev: y 0.05–0.46)
 SAME_LINE = 0.015  # bir qator: y farqi shundan kichik
 DATE_BAND = 0.03  # sana langardan biroz yuqori/pastda bo'lishi mumkin (shtamp)
+RECIPIENT_X = 0.45  # o'ng (qabul qiluvchi) bloki shundan o'ngda (layout.RIGHT_BLOCK_X)
 
 MONTHS = {
     "янв": 1, "фев": 2, "мар": 3, "апр": 4, "мая": 5, "май": 5, "июн": 6, "июл": 7, "авг": 8,
@@ -88,6 +96,19 @@ OCR_PATTERNS = DATE_PATTERNS + [
 ]
 
 
+def inside_number(low: str, start: int, end: int) -> bool:
+    """Sanaga o'xshash bo'lak raqamning ichida: "№" ga YOPISHGAN ("№03-01-26"), oldida "raqam/"
+    ("78/05-1/25") yoki keyin "/raqam" — "№03-01-26/785" dagi "03-01-26" sana emas (yangi xatlar:
+    shunday xato sana chiqqan). Bo'shliq bilan "№ 12.01.2026" — sana bo'lishi mumkin (dev: bitta
+    xatda matn qatlami sanani "№" dan keyin bergan; birinchi urinish uni ham to'sib qo'ygan edi)."""
+    before, after = low[max(0, start - 2) : start], low[end : end + 2]
+    return (
+        before[-1:] == "№"
+        or (before[-1:] in ("/", "-") and before[:1].isdigit())
+        or (after[:1] == "/" and after[1:2].isdigit())
+    )
+
+
 def parse_date(text: str, skip_after_ot: bool = False, patterns=DATE_PATTERNS) -> str | None:
     """Matndagi birinchi sana: 05.12.2025, 19.12.25, 05 ДЕК 2025, 2025 / 12 /22.
     patterns=OCR_PATTERNS — OCR bo'lagi matni uchun (qo'shimcha shakllar bilan)."""
@@ -95,6 +116,8 @@ def parse_date(text: str, skip_after_ot: bool = False, patterns=DATE_PATTERNS) -
     for pattern, parts in patterns:
         for m in pattern.finditer(low):
             if skip_after_ot and after_ot(low, m.start()):
+                continue
+            if inside_number(low, m.start(), m.end()):
                 continue
             day, month, year = parts(m)
             if month and (date := make_date(day, month, year)):
@@ -108,6 +131,8 @@ def date_spans(text: str, patterns=DATE_PATTERNS) -> list[tuple[int, int, str, b
     found = []
     for pattern, parts in patterns:
         for m in pattern.finditer(low):
+            if inside_number(low, m.start(), m.end()):
+                continue
             day, month, year = parts(m)
             if month and (date := make_date(day, month, year)):
                 found.append((m.start(), m.end(), date, after_ot(low, m.start())))
@@ -125,14 +150,30 @@ def is_date_token(token: str) -> bool:
     return len(re.findall(r"\d+", token)) == 3 and parse_date(token) is not None
 
 
+def after_na(words: list[Word], i: int) -> bool:
+    """ "№" dan oldin (shu qatorda, LOOK_BACK so'z ichida) "на" bor: "На ваш исх. №"."""
+    before = [w for w in words[max(0, i - LOOK_BACK) : i] if w.line == words[i].line]
+    return any(TRAP_BEFORE.match(w.text.strip(".,")) for w in before)
+
+
+def is_account(words: list[Word], i: int) -> bool:
+    """ "№" bank rekvizitiga tegishli: oldida "б/с", "ИНН" … yoki keyin 10+ raqamli son."""
+    prev = words[i - 1] if i > 0 and words[i - 1].line == words[i].line else None
+    if prev is not None and BANK_BEFORE.match(prev.text.strip(".,:")):
+        return True
+    return bool(ACCOUNT.fullmatch(find_number(words, i) or ""))
+
+
 def find_anchor(words: list[Word]) -> int | None:
-    """Sana-raqam qatoridagi "№": yuqori yarmida, eng yuqoridagisi, "На №" emas."""
+    """Sana-raqam qatoridagi "№": yuqori yarmida, eng yuqoridagisi; "На (ваш исх.) №" va bank
+    rekvizitlaridagi "№" emas."""
     found = [
         i
         for i, w in enumerate(words)
         if ANCHOR.match(w.text)
         and w.y0 < ANCHOR_MAX_Y
-        and not (i > 0 and TRAP_BEFORE.match(words[i - 1].text.strip(".,")))
+        and not after_na(words, i)
+        and not is_account(words, i)
     ]
     return min(found, key=lambda i: words[i].y0, default=None)
 
@@ -173,10 +214,16 @@ def parse_number(text: str) -> str | None:
 
 def find_date(words: list[Word], anchor: int) -> str | None:
     """Langar bilan bir balandlikdagi sana (avval o'sha qator, keyin biroz kengroq).
-    Oldida "от" turgan sana — boshqa xatniki, olinmaydi."""
+    Oldida "от" turgan sana — boshqa xatniki, olinmaydi. Langar chap blokda bo'lsa — sana ham faqat
+    chap blokdan: o'ng blokdagi qabul qiluvchi yozuvi "(№ … от …)" sanasi xatniki emas (yangi
+    xatlar: matn qatlami so'zlarni aralash bergan, "от" sanadan oldin turmagan)."""
     a = words[anchor]
+    left = a.x0 < RECIPIENT_X
     for band in (SAME_LINE, DATE_BAND):
-        line = sorted((w for w in words if abs(w.y0 - a.y0) <= band), key=lambda w: w.x0)
+        line = sorted(
+            (w for w in words if abs(w.y0 - a.y0) <= band and (not left or w.x0 < RECIPIENT_X)),
+            key=lambda w: w.x0,
+        )
         if date := parse_date(" ".join(w.text for w in line), skip_after_ot=True):
             return date
     return None

@@ -168,3 +168,48 @@ def test_text_layer_rule_is_unchanged(text):
 )
 def test_ocr_shapes_do_not_read_phones_as_dates(text):
     assert parse_date(text, patterns=OCR_PATTERNS) is None
+
+
+def test_anchor_skips_bank_details_and_reply_lines():
+    def line(tokens, y, n):
+        x = [0.05 + 0.1 * k for k in range(len(tokens))]
+        return [Word(t, x0, y, x0 + 0.09, y + 0.01, n) for t, x0 in zip(tokens, x, strict=True)]
+
+    bank = line(["б/с", "№", "4402041101034673"], 0.20, 0)  # bank rekviziti — langar emas
+    account = line(["№", "40702810900000012345"], 0.22, 1)  # 10+ raqamli hisob — langar emas
+    reply = line(["На", "ваш", "исх.", "№", "20/21-5/5036"], 0.25, 2)  # bizning raqamimiz
+    own = line(["17.01.2026", "№", "478"], 0.30, 3)  # xatning o'z sana-raqam qatori
+    page = PageText(1, "text_layer", bank + account + reply + own)
+    assert date_and_number(page) == ("17.01.2026", "478")
+    assert date_and_number(PageText(1, "text_layer", bank + account + reply)) == (None, None)
+
+
+def test_date_is_not_taken_from_inside_the_number():
+    words = [
+        Word("№03-01-26/785", 0.30, 0.25, 0.45, 0.26, 0),  # yopishgan raqam: ichida "03-01-26"
+        Word("12.01.2026", 0.05, 0.25, 0.20, 0.26, 0),
+    ]
+    assert date_and_number(PageText(1, "text_layer", words)) == ("12.01.2026", "03-01-26/785")
+    only_number = PageText(1, "text_layer", words[:1])
+    assert date_and_number(only_number) == (None, "03-01-26/785")  # raqam ichidan sana olinmaydi
+
+
+def test_date_of_the_recipient_block_is_not_the_letter_date():
+    words = [  # matn qatlami so'zlarni aralash bergan: "от" o'ng blokda sanadan oldin emas
+        Word("№", 0.20, 0.36, 0.22, 0.37, 0),
+        Word("78/05-1/25", 0.23, 0.36, 0.35, 0.37, 0),
+        Word("(№", 0.60, 0.36, 0.62, 0.37, 0),
+        Word("от", 0.63, 0.36, 0.65, 0.37, 0),
+        Word("10/04-2/25", 0.66, 0.36, 0.75, 0.37, 0),
+        Word("03.12.2025)", 0.76, 0.36, 0.85, 0.37, 0),
+    ]
+    assert date_and_number(PageText(1, "text_layer", words)) == (None, "78/05-1/25")
+
+
+def test_date_pattern_inside_a_number_is_not_a_date():
+    assert parse_date("12.01 №03-01-26/785") is None  # OCR qatori: raqam ichida "03-01-26"
+    assert parse_date("№03-01-26 от") is None  # "№" ga yopishgan — raqam
+    assert parse_date("вих. № 12.01.2026") == "12.01.2026"  # bo'shliq bilan — sana bo'lishi mumkin
+    assert parse_date("12.01.2026 № 55/07-1234") == "12.01.2026"
+    assert parse_date("12.01.2026г. №03-01-26/785") == "12.01.2026"
+    assert parse_date("№ 78/05-1/25") is None  # "05-1/25" — raqam o'rtasi ("78/" dan keyin)

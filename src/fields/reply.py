@@ -23,7 +23,7 @@ from src.fields.date_number import (
     ANCHOR_MAX_Y,
     NUMBER,
     SAME_LINE,
-    TRAP_BEFORE,
+    after_na,
     date_and_number,
     date_spans,
     is_date_token,
@@ -33,7 +33,6 @@ from src.fields.number_template import key, shape
 from src.reading.pages import CachedPage
 from src.reading.pdf_text import PageText, Word
 
-LOOK_BACK = 3  # "№" dan oldin shuncha so'z ichida "на" bo'lsa — javob qatori
 OUR_NEAR = 12  # so'z: bizning raqamimiz yonidagi sana shuncha so'z ichida (dev: 9/10)
 OT_BONUS = 20  # belgi: "от" dan keyingi sana shuncha belgi uzoqroq bo'lsa ham afzal
 JOINED = re.compile(r"^на№", re.IGNORECASE)  # "На№17/08-10/2934" — bo'shliqsiz yozilgan
@@ -49,10 +48,7 @@ def is_reply_anchor(words: list[Word], i: int) -> bool:
         return False
     if JOINED.match(word.text):
         return True
-    if not ANCHOR.match(word.text):
-        return False
-    before = [w for w in words[max(0, i - LOOK_BACK) : i] if w.line == word.line]
-    return any(TRAP_BEFORE.match(w.text.strip(".,")) for w in before)
+    return bool(ANCHOR.match(word.text)) and after_na(words, i)
 
 
 def find_reply_anchor(page: PageText) -> Word | None:
