@@ -42,7 +42,9 @@ COUNTRIES = [  # (naqsh, nom) — "Узбекистан" ataylab yo'q: u qabul q
 REGION = re.compile(
     r"([а-яё-]{4,}(?:ской|скои|ского|ская|ий|ой|ои))\s+(област\w*|обл\b|кра[яюй]\w*)"
 )
-REPUBLIC = re.compile(r"республик\w*\s+([а-яё]{4,})")
+# "Республика Калмыкия", "Республики Коми" — ot shaklidagi "республика" ("республиканское" emas)
+REPUBLIC = re.compile(r"\bреспублик(?:а|и|е|у|ой)\s+([а-яё-]{3,})")
+NOT_REGION = {"узбекистан"}  # qabul qiluvchi davlat — jo'natuvchining hududi emas
 REGION_TYPE = {"обл": "viloyati", "кра": "o'lkasi"}
 # Sifatdan yasab bo'lmaydigan nomlar (xodimlar yozgani)
 IRREGULAR = {
@@ -83,8 +85,13 @@ def find_region(low: str) -> tuple[list[str], str] | None:
             continue
         return region_names(m[1]), REGION_TYPE.get(m[2][:3], "viloyati")
     for m in REPUBLIC.finditer(low):
-        if m[1] in IRREGULAR:  # Rossiya ichidagi respublikalar ("Узбекистан" bu yerga tushmaydi)
-            return [IRREGULAR[m[1]]], "Respublikasi"
+        name = m[1]
+        if name in IRREGULAR:  # Rossiya ichidagi respublikalar: xodimlar yozadigan o'zbekcha nom
+            return [IRREGULAR[name]], "Respublikasi"
+        # yangi xatlar: ro'yxat dev'dagi 4 respublika bilan cheklangan edi — "Калмыкия" ko'rinmagan.
+        # Endi istalgan respublika nomi lotinga o'giriladi ("Kalmikiya"); davlat nomlari — alohida
+        if name not in NOT_REGION and not find_country(name):
+            return [to_latin(name).capitalize()], "Respublikasi"
     return None
 
 

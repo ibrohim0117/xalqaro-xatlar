@@ -5,6 +5,7 @@ import pytest
 from src.fields.sender_variants import (
     blank_places,
     find_country,
+    find_region,
     page_variants,
     region_names,
     same_place,
@@ -149,3 +150,12 @@ def test_place_of_the_blank_must_be_in_the_known_name():
     assert moldova == ["Moldova"]
     assert not same_place(moldova, "Gruziya Adliya vazirligi")  # tuzilishi o'xshash, joy boshqa
     assert not same_place([], "Gruziya Adliya vazirligi")  # joy topilmasa — ehtiyot: yo'q
+
+
+def test_any_republic_is_transliterated():
+    blank = "Российская Федерация Республика Калмыкия отдел ЗАГС Управления ЗАГС Калмыкии"
+    assert "Kalmikiya Respublikasi FHDY bo'limi" in sender_variants(blank)
+    assert find_region("республика калмыкия") == (["Kalmikiya"], "Respublikasi")
+    assert find_region("республики коми") == (["Komi"], "Respublikasi")
+    assert find_region("республика беларусь") is None  # davlat — alohida (COUNTRIES)
+    assert find_region("республиканское государственное учреждение") is None  # sifat, nom emas

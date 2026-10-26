@@ -67,7 +67,14 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         flags.append("hujjat_junatuvchi_tashkilot")
         # o'zbekcha nom variantlari (blankdan) va B5.10: eng o'xshash TANISH tashkilotlar — ball
         # past bo'lsa ham to'g'risi ko'pincha shular orasida (dev: 2 xatda 1- va 2-o'rinda)
-        known = [name for score, name in ranking[:KNOWN_SUGGESTIONS] if score > 0]
+        # blankda hudud/davlat aniqlangan bo'lsa — faqat nomida shu joy bor tanish tashkilotlar
+        # (yangi xatlar: Kalmikiya blankiga Rostov va Ukraina taklif qilingan edi)
+        places = blank_places(pages)
+        known = [
+            name
+            for score, name in ranking
+            if score > 0 and (not places or same_place(places, name))
+        ][:KNOWN_SUGGESTIONS]
         if options := list(dict.fromkeys(page_variants(pages) + known)):
             suggestions["hujjat_junatuvchi_tashkilot"] = options
     signer = find_signer(pages)
