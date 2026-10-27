@@ -17,6 +17,7 @@ Biror OCR ishlamasa (masalan, VLM serveri o'chiq) — shu xat uchun chetlanadi, 
 import logging
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date as Date
 
@@ -70,6 +71,14 @@ def crops_for(reader: str) -> tuple[str, ...]:
     return READER_CROPS.get(reader, CROPS)
 
 
+def lane_of(reader: str) -> str:
+    """Yo'lak: VLM alohida jarayonda (server) ishlaydi — bizning kod faqat javobini kutadi; qolgan
+    OCR'lar shu protsessorda. Ikki yo'lak bir vaqtda ishlaydi (vaqt o'lchovi, real 10 xat: VLM
+    ~32.6 s, qolgan OCR'lar ~5.1 s — ular VLM'ni kutish ichiga kiradi). Yo'lak ichida tartib
+    o'sha: VLM serveriga bir vaqtda bitta so'rov (8 GB xotira)."""
+    return "vlm" if reader.startswith("vlm") else "cpu"
+
+
 class DateOcr:
     def __init__(self, readers: list[LineReader]):
         self.readers = readers
@@ -89,17 +98,16 @@ class DateOcr:
             for name, box in regions.items()
             if name in wanted
         }
-        found, worked, read = [], [], {}
+        lanes: dict[str, list[LineReader]] = {}
         for reader in self.readers:
-            # bitta OCR ishlamasa (masalan, VLM serveri o'chiq) — chetlanadi, qolganlari davom etadi
-            try:
-                texts = {
-                    name: reader.read(png)
-                    for name, png in crops.items()
-                    if name in crops_for(reader.name)
-                }
-            except Exception as error:
-                log.warning("%s ishlamadi: %s", reader.name, error)
+            lanes.setdefault(lane_of(reader.name), []).append(reader)
+        with ThreadPoolExecutor(max_workers=len(lanes) or 1) as pool:
+            jobs = [pool.submit(self._read_lane, readers, crops) for readers in lanes.values()]
+            results = {reader: texts for job in jobs for reader, texts in job.result()}
+        found, worked, read = [], [], {}
+        for reader in self.readers:  # natijalar avvalgi tartibda: 1-ishlagan OCR — topuvchi
+            texts = results[reader]
+            if texts is None:
                 continue
             found.append(windowed(engine_dates(texts), received))
             worked.append(reader.name)
@@ -110,6 +118,26 @@ class DateOcr:
         prefill = prefill_date(found, worked[0] if worked else None)
         suggestions = ranked([{d for d in f.values() if d} for f in found])
         return DateReading(None, prefill, suggestions, seconds, worked, read)
+
+    @staticmethod
+    def _read_lane(
+        readers: list[LineReader], crops: dict[str, bytes]
+    ) -> list[tuple[LineReader, dict[str, str] | None]]:
+        """Bitta yo'lakdagi OCR'lar ketma-ket: har biri o'z bo'laklarini o'qiydi. Biror OCR
+        ishlamasa (masalan, VLM serveri o'chiq) — None, qolganlari davom etadi."""
+        out = []
+        for reader in readers:
+            try:
+                texts = {
+                    name: reader.read(png)
+                    for name, png in crops.items()
+                    if name in crops_for(reader.name)
+                }
+            except Exception as error:
+                log.warning("%s ishlamadi: %s", reader.name, error)
+                texts = None
+            out.append((reader, texts))
+        return out
 
 
 def build_date_ocr(names: str | None = None) -> DateOcr | None:

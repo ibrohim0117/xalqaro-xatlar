@@ -1,5 +1,6 @@
 """src/engine/date_ocr.py testlari — soxta OCR'lar bilan (haqiqiy model kerak emas)."""
 
+import time
 from datetime import date
 
 import pymupdf
@@ -102,6 +103,55 @@ def test_broken_vlm_extract_leaves_the_old_vlm_as_finder(letter):
     reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
     assert reading.readers == ["vlm", "rapid"]
     assert reading.prefill == "12.03.2026"  # VLM ko'chirish topdi, RapidOCR tasdiqladi
+
+
+class SlowReader(FakeReader):
+    """Har bo'lakda biroz kutadi va qachon o'qiganini yozib boradi — parallel ishlashni ko'rish."""
+
+    def __init__(self, name: str, text: str = "", delay: float = 0.05):
+        super().__init__(name, text)
+        self.delay, self.spans = delay, []
+
+    def read(self, png: bytes) -> str:
+        start = time.perf_counter()
+        time.sleep(self.delay)
+        self.spans.append((start, time.perf_counter()))
+        return super().read(png)
+
+
+def overlap(a: SlowReader, b: SlowReader) -> bool:
+    return any(s1 < e2 and s2 < e1 for s1, e1 in a.spans for s2, e2 in b.spans)
+
+
+def test_cpu_ocrs_work_while_waiting_for_vlm_but_vlm_gets_one_request_at_a_time(letter):
+    extract = SlowReader("vlm-extract", '{"sana": "12.03.2026"}', delay=0.08)
+    vlm = SlowReader("vlm", "12.03.2026 № 55/07", delay=0.08)
+    rapid = SlowReader("rapidocr", "12.03.2026 No 55", delay=0.01)  # tez — oldinroq tugaydi
+    tess = SlowReader("tesseract-block", "№ 55", delay=0.01)
+    reading = DateOcr([extract, vlm, rapid, tess]).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    assert overlap(extract, rapid)  # protsessor OCR'i VLM javobini kutish ichida ishladi
+    assert not overlap(extract, vlm)  # VLM serveriga bir vaqtda bitta so'rov (8 GB xotira)
+    assert not overlap(rapid, tess)  # protsessor yo'lagi ichida ham ketma-ket
+    # kim avval tugaganidan qat'i nazar, natija tartibi o'sha: 1-ishlagan OCR — topuvchi
+    assert reading.readers == ["vlm-extract", "vlm", "rapidocr", "tesseract-block"]
+    assert reading.prefill == "12.03.2026"
+
+
+def test_parallel_reading_gives_the_same_result_as_one_lane(letter, monkeypatch):
+    def run():
+        readers = [
+            FakeReader("vlm-extract", '{"sana": "12.03.2026", "raqam": "55/07-1234"}'),
+            FakeReader("vlm", broken=True),
+            FakeReader("rapidocr", "12.08.2026 No 55"),
+            FakeReader("tesseract-block", "12.03.2026"),
+        ]
+        reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
+        return reading.prefill, reading.suggestions, reading.readers, reading.texts
+
+    parallel = run()
+    monkeypatch.setattr("src.engine.date_ocr.lane_of", lambda name: "bitta")  # eskicha: navbat
+    assert parallel == run()
+    assert parallel[2] == ["vlm-extract", "rapidocr", "tesseract-block"]  # ishlamagani chetda
 
 
 def answer_with(date_value=None, flags=("hujjat_sana", "hujjat_raqami")):

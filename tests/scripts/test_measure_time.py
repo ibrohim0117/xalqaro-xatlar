@@ -7,6 +7,7 @@ from scripts.prototype.measure_time import (
     CUT,
     Timed,
     changed_fields,
+    one_lane,
     tagged_crops,
     tips_difference,
 )
@@ -73,3 +74,11 @@ def test_tips_difference_tells_order_from_content_without_values():
         == "tarkib: umumiy 2, 3 va 3 ta"
     )  # ovozi teng 3-o'rin boshqa chiqqan
     assert tips_difference("55/07", None) == "tarkib: umumiy 0, 1 va 0 ta"  # predict: bitta qiymat
+
+
+def test_one_lane_puts_every_ocr_in_one_queue_and_restores():
+    with one_lane(True):
+        assert date_ocr.lane_of("vlm-extract") == date_ocr.lane_of("rapidocr")
+    assert date_ocr.lane_of("vlm-extract") != date_ocr.lane_of("rapidocr")
+    with one_lane(False):
+        assert date_ocr.lane_of("vlm-extract") != date_ocr.lane_of("rapidocr")

@@ -16,11 +16,13 @@ va kamida 10 xatda solishtiring (javoblarga ta'sir qilmaydi — faqat soniyalarg
 DIQQAT (javoblar uchun): sana takliflarida ovozi teng sanalar tartibi har ishga tushirishda
 boshqacha bo'lishi mumkin (date_vote.ranked: set tartibi Python hash'iga bog'liq) — o'zgarishsiz
 kod ham boshqa taklif berishi mumkin. Aniq solishtirish uchun ikkala o'lchov ham PYTHONHASHSEED=0
-bilan.
+bilan; --sequential — OCR'lar eskicha bitta navbatda (parallel yo'laklarsiz).
 
 Ishga tushirish (VLM yoqilgan bo'lsin — make vlm; sahifa serveri shart emas):
     poetry run python -m scripts.prototype.measure_time outputs/papkalar/real2_25 --name oldin
     poetry run python -m scripts.prototype.measure_time --compare oldin oldin2
+    PYTHONHASHSEED=0 poetry run python -m scripts.prototype.measure_time <papka> --name eski0 \
+        --sequential
 """
 
 import argparse
@@ -134,14 +136,26 @@ def received_of(truth: dict) -> Date:
     return to_day((truth.get("rekvizit_document") or {}).get("kirish_sana")) or Date.today()
 
 
-def measure(folder: Path, name: str, limit: int | None) -> list[Row]:
+@contextmanager
+def one_lane(enabled: bool) -> Iterator[None]:
+    """enabled bo'lsa — hamma OCR bitta navbatda (parallel yo'laklardan oldingi tartib)."""
+    lane_of = date_ocr.lane_of
+    if enabled:
+        date_ocr.lane_of = lambda name: "bitta"
+    try:
+        yield
+    finally:
+        date_ocr.lane_of = lane_of
+
+
+def measure(folder: Path, name: str, limit: int | None, sequential: bool = False) -> list[Row]:
     letters = list_letters(folder)[:limit]
     out = OUT_DIR / name
     out.mkdir(parents=True, exist_ok=True)
     log: dict[tuple[str, str], float] = defaultdict(float)
     model = current_model()
     rows = []
-    with tagged_crops(log):
+    with tagged_crops(log), one_lane(sequential):
         engine = build_date_ocr()
         timed = DateOcr([Timed(r, log) for r in engine.readers]) if engine else None
         for i, letter in enumerate(letters, 1):
@@ -276,13 +290,16 @@ def main() -> None:
     parser.add_argument("--name", default="oldin", help="javoblar papkasi: outputs/vaqt/<nom>")
     parser.add_argument("--limit", type=int, help="faqat birinchi N xat")
     parser.add_argument("--compare", nargs=2, metavar=("BIRINCHI", "IKKINCHI"))
+    parser.add_argument(
+        "--sequential", action="store_true", help="OCR'lar eskicha — bitta navbatda (solishtirish)"
+    )
     args = parser.parse_args()
     if args.compare:
         compare(*args.compare)
         return
     if args.folder is None:
         parser.error("papka kerak (yoki --compare)")
-    rows = measure(args.folder, args.name, args.limit)
+    rows = measure(args.folder, args.name, args.limit, args.sequential)
     report(rows, args.folder, args.name)
 
 
