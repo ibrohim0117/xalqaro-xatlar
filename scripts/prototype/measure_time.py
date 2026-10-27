@@ -4,6 +4,10 @@ Prototip zanjiri (pipeline.process_pdf) aynan o'zi ishlaydi; har OCR o'lchagich 
 har o'qish qaysi bo'lak (header, page, line, date, number) uchun ekani belgilanadi — natija
 o'zgarmaydi. Ekranga faqat soniyalar va sonlar chiqadi.
 
+Sana dvigatelining OCR matnlari ham saqlanadi: outputs/vaqt/<nom>/ocr/<DOC>.json — sana qoidasi
+variantlarini OCR'siz solishtirish uchun (scripts/ocr/compare_date_rules). Ichida real xat matni
+bor (gitignore'da, Claude ochmaydi).
+
 Javoblar outputs/vaqt/<nom>/<DOC>.json ga yoziladi (gitignore'da). Tezlashtirishdan keyin --compare
 bilan solishtiriladi: "sifatga ta'sir qilmadi" = har xatning javobi AYNAN bir xil. Ekranga faqat
 DOC raqami va farq qilgan maydon NOMI chiqadi. Avval kodni o'zgartirmasdan ikki marta ishga
@@ -41,7 +45,7 @@ from time import perf_counter
 
 from src.common.schema import REKVIZIT_FIELDS
 from src.engine import date_ocr
-from src.engine.date_ocr import DateOcr, build_date_ocr
+from src.engine.date_ocr import DateOcr, DateReading, build_date_ocr
 from src.engine.pipeline import current_model, process_pdf
 from src.evaluation.dataset import list_letters, load_truth
 from src.fields.date_vote import to_day
@@ -141,6 +145,19 @@ def received_of(truth: dict) -> Date:
     return to_day((truth.get("rekvizit_document") or {}).get("kirish_sana")) or Date.today()
 
 
+def save_reading(path: Path, reading: DateReading, received: Date) -> None:
+    """Sana dvigateli natijasi (ishlagan OCR'lar tartibi, bo'lak matnlari, bosma sana, kelgan sana)
+    — compare_date_rules qoida variantlarini shundan OCR'siz qayta hisoblaydi."""
+    data = {
+        "readers": reading.readers,
+        "texts": reading.texts,
+        "auto": reading.auto,
+        "received": received.strftime("%d.%m.%Y"),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
 @contextmanager
 def one_lane(enabled: bool) -> Iterator[None]:
     """enabled bo'lsa — hamma OCR bitta navbatda (parallel yo'laklardan oldingi tartib)."""
@@ -171,6 +188,10 @@ def measure(folder: Path, name: str, limit: int | None, sequential: bool = False
             text = json.dumps(result.answer, ensure_ascii=False, sort_keys=True, indent=1)
             (out / f"{letter.doc_id}.json").write_text(text, encoding="utf-8")
             reading = result.date
+            if (
+                reading is not None
+            ):  # ocr/ ichida — --compare faqat yuqori darajadagi json'larni oladi
+                save_reading(out / "ocr" / f"{letter.doc_id}.json", reading, received)
             rows.append(
                 Row(
                     total=result.seconds,
