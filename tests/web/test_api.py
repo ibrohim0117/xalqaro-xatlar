@@ -116,7 +116,10 @@ class FakeDateOcr:
     def __init__(self):
         self.received = None
 
-    def read(self, page, first, received):
+    def start(self, page):
+        return None  # erta boshlash yo'q (pipeline read'ga None beradi)
+
+    def read(self, page, first, received, early=None):
         self.received = received
         return DateReading(None, "12.03.2026", ["12.03.2026", "13.03.2026"], 1.5, ["vlm", "rapid"])
 

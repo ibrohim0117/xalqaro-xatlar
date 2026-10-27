@@ -154,6 +154,55 @@ def test_parallel_reading_gives_the_same_result_as_one_lane(letter, monkeypatch)
     assert parallel[2] == ["vlm-extract", "rapidocr", "tesseract-block"]  # ishlamagani chetda
 
 
+def wait_for(condition, seconds: float = 5.0) -> None:
+    deadline = time.monotonic() + seconds
+    while not condition() and time.monotonic() < deadline:
+        time.sleep(0.01)
+
+
+def test_vlm_reads_header_and_page_before_page_ocr_and_waits_for_the_anchor(letter):
+    page, first = letter(NO_PRINTED_DATE)
+    extract = FakeReader("vlm-extract", '{"sana": "12.03.2026"}')
+    vlm = FakeReader("vlm", "12.03.2026 № 55/07")
+    rapid = FakeReader("rapidocr", "12.03.2026 No 55")
+    ocr = DateOcr([extract, vlm, rapid])
+    early = ocr.start(page)  # pipeline buni sahifa OCR'idan OLDIN chaqiradi
+    wait_for(lambda: extract.calls == 2)
+    time.sleep(0.05)  # "№" qatori hali yo'q — navbat shu yerda kutib turadi
+    assert (extract.calls, vlm.calls, rapid.calls) == (2, 0, 0)  # faqat header va page o'qildi
+    reading = ocr.read(page, first, RECEIVED, early)
+    assert (extract.calls, vlm.calls, rapid.calls) == (3, 3, 3)
+    assert list(reading.texts["vlm-extract"]) == ["header", "page", "line"]  # tartib o'sha
+    assert list(reading.texts["vlm"]) == ["header", "line", "date"]
+    assert reading.readers == ["vlm-extract", "vlm", "rapidocr"]
+
+
+def test_abandoned_early_reading_stops_instead_of_waiting_forever(letter):
+    page, _ = letter(NO_PRINTED_DATE)
+    extract, vlm = FakeReader("vlm-extract", "x"), FakeReader("vlm", "y")
+    early = DateOcr([extract, vlm]).start(page)
+    early.abandon()  # zanjir xato bilan to'xtadi — "№" qatori hech qachon kelmaydi
+    early.job.result(timeout=5)  # osilib qolmaydi
+    assert (extract.calls, vlm.calls) == (2, 0)  # header va page'dan nariga o'tmadi
+
+
+def test_early_start_gives_the_same_result_as_one_lane(letter, monkeypatch):
+    def run():
+        readers = [
+            FakeReader("vlm-extract", '{"sana": "12.03.2026", "raqam": "55/07-1234"}'),
+            FakeReader("vlm", "12.03.2026 № 55/07-1234"),
+            FakeReader("rapidocr", "12.08.2026 No 55"),
+        ]
+        ocr = DateOcr(readers)
+        page, first = letter(NO_PRINTED_DATE)
+        reading = ocr.read(page, first, RECEIVED, ocr.start(page))
+        return reading.prefill, reading.suggestions, reading.readers, reading.texts
+
+    early = run()
+    monkeypatch.setattr("src.engine.date_ocr.lane_of", lambda name: "bitta")  # eskicha: navbat
+    assert early == run()
+
+
 def answer_with(date_value=None, flags=("hujjat_sana", "hujjat_raqami")):
     return {
         "rekvizit_document": {"hujjat_sana": date_value},

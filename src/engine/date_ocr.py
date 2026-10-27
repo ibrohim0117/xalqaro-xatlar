@@ -16,14 +16,16 @@ Biror OCR ishlamasa (masalan, VLM serveri o'chiq) — shu xat uchun chetlanadi, 
 
 import logging
 import os
+import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import date as Date
 
 import pymupdf
 
-from src.engine.locate import ocr_regions
+from src.engine.locate import fixed_regions, ocr_regions
 from src.fields.date_number import date_and_number
 from src.fields.date_vote import (
     WINDOW_DAYS,
@@ -79,6 +81,72 @@ def lane_of(reader: str) -> str:
     return "vlm" if reader.startswith("vlm") else "cpu"
 
 
+EARLY_LANE = "vlm"  # sahifa OCR'idan oldin boshlanadigan yo'lak (EarlyReading)
+Pairs = list[
+    tuple[LineReader, dict[str, str] | None]
+]  # OCR va uning bo'lak matnlari (None — ishlamadi)
+
+
+def read_queue(
+    readers: list[LineReader],
+    fixed: dict[str, bytes],
+    rest: Callable[[], dict[str, bytes] | None],
+) -> Pairs:
+    """Bitta yo'lakdagi OCR'lar ketma-ket. Har biri avval o'zgarmas bo'laklarini (fixed: header,
+    page) o'qiydi, keyin "№" qatori bo'laklarini — rest() beradi (kerak bo'lsa kutadi). Tartib
+    ocr_regions'dagidek (fixed u yerda ham birinchi). rest() None — zanjir to'xtadi, navbat tugaydi.
+    Biror OCR ishlamasa (masalan, VLM serveri o'chiq) — None, qolganlari davom etadi."""
+    out: Pairs = []
+    for reader in readers:
+        wanted = crops_for(reader.name)
+        try:
+            texts = {name: reader.read(png) for name, png in fixed.items() if name in wanted}
+            if any(name not in fixed for name in wanted):
+                crops = rest()
+                if crops is None:
+                    return out
+                texts |= {
+                    name: reader.read(png)
+                    for name, png in crops.items()
+                    if name in wanted and name not in fixed
+                }
+        except Exception as error:
+            log.warning("%s ishlamadi: %s", reader.name, error)
+            texts = None
+        out.append((reader, texts))
+    return out
+
+
+class EarlyReading:
+    """VLM yo'lagi sahifa OCR'idan OLDIN boshlanadi: header va page ("№" ga bog'liq emas) darhol
+    o'qiladi, "№" qatori bo'laklari Tesseract 1-sahifani o'qigach beriladi (finish). VLM serveriga
+    so'rovlar tartibi o'sha — faqat ertaroq boshlanadi. Kesish (PyMuPDF) doim asosiy oqimda, orqa
+    fonda faqat tayyor PNG baytlari o'qiladi. Vaqt o'lchovi (real 10 xat): sahifa OCR o'rtacha
+    3.4 s — VLM'ni kutish ichiga kiradi."""
+
+    def __init__(self, readers: list[LineReader], fixed: dict[str, bytes], started: float):
+        self.fixed, self.started = fixed, started
+        self._ready, self._crops = threading.Event(), None
+        pool = ThreadPoolExecutor(max_workers=1)
+        self.job = pool.submit(read_queue, readers, fixed, self._rest)
+        pool.shutdown(wait=False)
+
+    def _rest(self) -> dict[str, bytes] | None:
+        self._ready.wait()
+        return self._crops
+
+    def finish(self, crops: dict[str, bytes]) -> Pairs:
+        """Hamma bo'laklar beriladi; navbat tugashini kutadi."""
+        self._crops = crops
+        self._ready.set()
+        return self.job.result()
+
+    def abandon(self) -> None:
+        """Zanjir xato bilan to'xtasa: navbat qolgan bo'laklarni kutmasdan tugaydi (osilib
+        qolmaydi). finish'dan keyin chaqirilsa — hech narsa qilmaydi."""
+        self._ready.set()
+
+
 class DateOcr:
     def __init__(self, readers: list[LineReader]):
         self.readers = readers
@@ -87,23 +155,54 @@ class DateOcr:
         """Shu nomdagi OCR (masalan, imzo uchun Apple Vision) — yuklangan bo'lsa."""
         return next((r for r in self.readers if r.name == name), None)
 
-    def read(self, page: pymupdf.Page, first: CachedPage, received: Date) -> DateReading:
-        auto = date_and_number(first.text_layer)[0]
-        auto = auto if in_window(auto, received, WINDOW_DAYS) else None
-        start = time.perf_counter()
-        regions = ocr_regions(first)
-        wanted = {name for reader in self.readers for name in crops_for(reader.name)}
-        crops = {
+    def _wanted(self) -> set[str]:
+        return {name for reader in self.readers for name in crops_for(reader.name)}
+
+    def start(self, page: pymupdf.Page) -> EarlyReading:
+        """Sahifa OCR'idan oldin (pipeline): header va page kesiladi, VLM o'qiy boshlaydi."""
+        started = time.perf_counter()
+        wanted = self._wanted()
+        fixed = {
             name: crop_png(page, box, dpi=dpi_for(name))
-            for name, box in regions.items()
+            for name, box in fixed_regions().items()
             if name in wanted
         }
-        lanes: dict[str, list[LineReader]] = {}
-        for reader in self.readers:
-            lanes.setdefault(lane_of(reader.name), []).append(reader)
-        with ThreadPoolExecutor(max_workers=len(lanes) or 1) as pool:
-            jobs = [pool.submit(self._read_lane, readers, crops) for readers in lanes.values()]
-            results = {reader: texts for job in jobs for reader, texts in job.result()}
+        early = [reader for reader in self.readers if lane_of(reader.name) == EARLY_LANE]
+        return EarlyReading(early, fixed, started)
+
+    def read(
+        self,
+        page: pymupdf.Page,
+        first: CachedPage,
+        received: Date,
+        early: EarlyReading | None = None,
+    ) -> DateReading:
+        """early — pipeline sahifa OCR'idan oldin boshlagan VLM yo'lagi; berilmasa — shu yerda."""
+        auto = date_and_number(first.text_layer)[0]
+        auto = auto if in_window(auto, received, WINDOW_DAYS) else None
+        early = early or self.start(page)
+        try:
+            wanted = self._wanted()
+            crops = {
+                name: early.fixed[name]
+                if name in early.fixed
+                else crop_png(page, box, dpi=dpi_for(name))
+                for name, box in ocr_regions(first).items()
+                if name in wanted
+            }
+            lanes: dict[str, list[LineReader]] = {}
+            for reader in self.readers:
+                if lane_of(reader.name) != EARLY_LANE:
+                    lanes.setdefault(lane_of(reader.name), []).append(reader)
+            with ThreadPoolExecutor(max_workers=len(lanes) or 1) as pool:
+                jobs = [
+                    pool.submit(read_queue, readers, {}, lambda: crops)
+                    for readers in lanes.values()
+                ]
+                pairs = early.finish(crops) + [pair for job in jobs for pair in job.result()]
+        finally:
+            early.abandon()
+        results = dict(pairs)
         found, worked, read = [], [], {}
         for reader in self.readers:  # natijalar avvalgi tartibda: 1-ishlagan OCR — topuvchi
             texts = results[reader]
@@ -112,32 +211,14 @@ class DateOcr:
             found.append(windowed(engine_dates(texts), received))
             worked.append(reader.name)
             read[reader.name] = texts
-        seconds = time.perf_counter() - start
+        seconds = (
+            time.perf_counter() - early.started
+        )  # sahifa OCR'i bilan ustma-ust bo'lishi mumkin
         if auto:  # sana bosma — OCR matnlari faqat raqam uchun (B5.12)
             return DateReading(auto=auto, seconds=seconds, readers=worked, texts=read)
         prefill = prefill_date(found, worked[0] if worked else None)
         suggestions = ranked([{d for d in f.values() if d} for f in found])
         return DateReading(None, prefill, suggestions, seconds, worked, read)
-
-    @staticmethod
-    def _read_lane(
-        readers: list[LineReader], crops: dict[str, bytes]
-    ) -> list[tuple[LineReader, dict[str, str] | None]]:
-        """Bitta yo'lakdagi OCR'lar ketma-ket: har biri o'z bo'laklarini o'qiydi. Biror OCR
-        ishlamasa (masalan, VLM serveri o'chiq) — None, qolganlari davom etadi."""
-        out = []
-        for reader in readers:
-            try:
-                texts = {
-                    name: reader.read(png)
-                    for name, png in crops.items()
-                    if name in crops_for(reader.name)
-                }
-            except Exception as error:
-                log.warning("%s ishlamadi: %s", reader.name, error)
-                texts = None
-            out.append((reader, texts))
-        return out
 
 
 def build_date_ocr(names: str | None = None) -> DateOcr | None:

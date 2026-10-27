@@ -1,14 +1,21 @@
 """src/engine/pipeline.py testlari — soxta xat va to'qilgan nomlar bilan."""
 
+import threading
+import time
+from datetime import date
+
 import pymupdf
 import pytest
 
+from src.engine.date_ocr import DateOcr
 from src.engine.feedback import confirm_sender
 from src.engine.model import Model, save_model
 from src.engine.pipeline import current_model, process_pdf
 from tests.conftest import needs_tesseract
+from tests.engine.test_date_ocr import FakeReader
 
 MODEL = Model(names={"fargona": "Farg'ona viloyati adliya boshqarmasi"}, summary="Mazmun")
+RECEIVED = date(2026, 3, 20)
 
 
 @needs_tesseract
@@ -34,6 +41,37 @@ def test_process_pdf_from_bytes(letter_pdf):
 def test_not_a_pdf(data):
     with pytest.raises(pymupdf.FileDataError):
         process_pdf(data, MODEL)
+    with pytest.raises(pymupdf.FileDataError):  # sana dvigateli bilan ham — o'sha xato
+        process_pdf(data, MODEL, DateOcr([FakeReader("vlm-extract", "x")]))
+
+
+@needs_tesseract
+def test_early_vlm_start_does_not_change_the_answer(letter_pdf, monkeypatch):
+    def run():
+        readers = [
+            FakeReader("vlm-extract", '{"sana": "12.03.2026", "raqam": "55/07-1234"}'),
+            FakeReader("vlm", "12.03.2026 № 55/07-1234"),
+            FakeReader("rapidocr", "12.03.2026 No 55"),
+        ]
+        return process_pdf(letter_pdf.read_bytes(), MODEL, DateOcr(readers), RECEIVED).answer
+
+    early = run()
+    monkeypatch.setattr("src.engine.date_ocr.lane_of", lambda name: "bitta")  # eskicha: navbat
+    assert early == run()
+
+
+def test_failure_after_early_start_leaves_no_waiting_thread(letter_pdf, monkeypatch):
+    def broken(*args, **kwargs):
+        raise ValueError("sahifa o'qilmadi")
+
+    monkeypatch.setattr("src.engine.pipeline.extract_pages", broken)
+    before = threading.active_count()
+    with pytest.raises(ValueError):
+        process_pdf(letter_pdf.read_bytes(), MODEL, DateOcr([FakeReader("vlm-extract", "x")]))
+    deadline = time.monotonic() + 5
+    while threading.active_count() > before and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert threading.active_count() <= before  # VLM navbati "№" qatorini kutib qolmadi
 
 
 def test_current_model_adds_confirmed_senders(tmp_path):

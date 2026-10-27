@@ -54,21 +54,29 @@ def process_pdf(
     """received — xat kelgan sana (sana oynasi uchun); berilmasa — bugun."""
     start = time.perf_counter()
     stats = OcrStats()
-    pages = extract_pages(pdf, max_pages=MAX_PAGES, stats=stats)
-    if not pages:
-        raise ValueError("PDF'da sahifa yo'q")
-    answer = predict(pages, model)
-    blank = header_text(pages, SENDER_MODE)
-    boxes = locate(pages)
-    reading = None
-    if date_ocr is not None:
+    early = None
+    if date_ocr is not None:  # VLM header va page'ni sahifa OCR'i bilan bir vaqtda o'qiydi
         with open_pdf(pdf) as doc:
-            reading = date_ocr.read(doc[0], pages[0], received or Date.today())
-            if found := vision_fallback(doc[0], pages, date_ocr.reader(VISION)):
-                signer, repaired = found
-                apply_signer(answer, signer, repaired)
-                boxes["imzolagan_shaxs"] = [box(signer.page, *signer.box)]
-        apply_reading(answer, reading)
+            early = date_ocr.start(doc[0]) if doc.page_count else None
+    try:
+        pages = extract_pages(pdf, max_pages=MAX_PAGES, stats=stats)
+        if not pages:
+            raise ValueError("PDF'da sahifa yo'q")
+        answer = predict(pages, model)
+        blank = header_text(pages, SENDER_MODE)
+        boxes = locate(pages)
+        reading = None
+        if date_ocr is not None:
+            with open_pdf(pdf) as doc:
+                reading = date_ocr.read(doc[0], pages[0], received or Date.today(), early)
+                if found := vision_fallback(doc[0], pages, date_ocr.reader(VISION)):
+                    signer, repaired = found
+                    apply_signer(answer, signer, repaired)
+                    boxes["imzolagan_shaxs"] = [box(signer.page, *signer.box)]
+            apply_reading(answer, reading)
+    finally:
+        if early is not None:
+            early.abandon()  # xato bo'lsa — orqa fondagi VLM navbati kutib qolmasin
     sender = answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"]
     number = read_number(pages[0], reading, number_template(model, sender))
     apply_number(answer, number)

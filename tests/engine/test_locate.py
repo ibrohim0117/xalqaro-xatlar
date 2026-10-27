@@ -3,7 +3,7 @@
 import pymupdf
 import pytest
 
-from src.engine.locate import locate, ocr_regions, reply_box
+from src.engine.locate import fixed_regions, locate, ocr_regions, reply_box
 from src.reading.pages import CachedPage
 from src.reading.pdf_text import PageText, text_layer_words
 from tests.conftest import FAKE_LETTER, make_letter_pdf
@@ -68,6 +68,8 @@ def test_regions_of_a_letter(tmp_path):
     first = pages_of(make_letter_pdf(tmp_path / "xat.pdf"))[0]
     found = ocr_regions(first)
     assert set(found) == {"header", "page", "line", "date", "number"}  # "На №" qatori yo'q
+    # o'zgarmas bo'laklar birinchi: VLM ularni sahifa OCR'idan oldin, shu tartibda o'qiydi
+    assert list(found)[:2] == list(fixed_regions()) == ["header", "page"]
     assert (
         found["line"]["x0"] == found["date"]["x0"] and found["line"]["x1"] == found["number"]["x1"]
     )

@@ -16,7 +16,10 @@ va kamida 10 xatda solishtiring (javoblarga ta'sir qilmaydi — faqat soniyalarg
 DIQQAT (javoblar uchun): sana takliflarida ovozi teng sanalar tartibi har ishga tushirishda
 boshqacha bo'lishi mumkin (date_vote.ranked: set tartibi Python hash'iga bog'liq) — o'zgarishsiz
 kod ham boshqa taklif berishi mumkin. Aniq solishtirish uchun ikkala o'lchov ham PYTHONHASHSEED=0
-bilan; --sequential — OCR'lar eskicha bitta navbatda (parallel yo'laklarsiz).
+bilan; --sequential — OCR'lar eskicha bitta navbatda (parallel yo'laklarsiz, VLM'ni sahifa
+OCR'idan oldin boshlamasdan).
+Bosqichlar ustma-ust: VLM header va page'ni sahifa OCR'i bilan bir vaqtda o'qiydi, OCR'lar ham
+parallel — qatorlar yig'indisi "hammasi"dan oshishi mumkin.
 
 Ishga tushirish (VLM yoqilgan bo'lsin — make vlm; sahifa serveri shart emas):
     poetry run python -m scripts.prototype.measure_time outputs/papkalar/real2_25 --name oldin
@@ -58,8 +61,13 @@ class Crop(bytes):
 def tagged_crops(log: dict[tuple[str, str], float] | None = None) -> Iterator[None]:
     """date_ocr kesgan bo'laklarga nom qo'yadi (ocr_regions kaliti) va kesish vaqtini log'ga
     yozadi; chiqishda asli tiklanadi."""
-    regions, crop_png = date_ocr.ocr_regions, date_ocr.crop_png
+    regions, fixed, crop_png = date_ocr.ocr_regions, date_ocr.fixed_regions, date_ocr.crop_png
     names: dict[int, str] = {}
+
+    def named_fixed():  # header va page — sahifa OCR'idan oldin kesiladi (EarlyReading)
+        found = fixed()
+        names.update({id(box): name for name, box in found.items()})
+        return found
 
     def named_regions(first):
         found = regions(first)
@@ -75,11 +83,12 @@ def tagged_crops(log: dict[tuple[str, str], float] | None = None) -> Iterator[No
             log[CUT, png.name] += perf_counter() - start
         return png
 
-    date_ocr.ocr_regions, date_ocr.crop_png = named_regions, named_crop
+    date_ocr.ocr_regions, date_ocr.fixed_regions = named_regions, named_fixed
+    date_ocr.crop_png = named_crop
     try:
         yield
     finally:
-        date_ocr.ocr_regions, date_ocr.crop_png = regions, crop_png
+        date_ocr.ocr_regions, date_ocr.fixed_regions, date_ocr.crop_png = regions, fixed, crop_png
 
 
 class Timed:
@@ -125,10 +134,6 @@ class Row:
     def reading(self) -> float:
         """Bo'lak OCR'lari soat bo'yicha: OCR'lar parallel ishlasa, ularning yig'indisidan kam."""
         return self.crops - self.cutting
-
-    @property
-    def rest(self) -> float:
-        return self.total - self.page_ocr - self.crops - self.signer
 
 
 def received_of(truth: dict) -> Date:
@@ -213,7 +218,8 @@ def report(rows: list[Row], folder: Path, name: str) -> None:
         if any(per_letter):
             line(f"  {reader}", per_letter)
     line("imzo (Apple Vision zaxirasi)", [r.signer for r in rows])
-    line("qolgani (matn qatlami, qoidalar)", [r.rest for r in rows])
+    # "qolgani" (matn qatlami, qoidalar) olib tashlandi: 27.10 o'lchovlarida 0.1–0.2 s edi, endi esa
+    # bosqichlar ustma-ust — ayirma ma'nosini yo'qotadi
 
     print("\n  Bo'lak bo'yicha (median soniya, faqat o'qilgan xatlarda; qavsda — nechta xat):")
     for reader in readers:

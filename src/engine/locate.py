@@ -72,11 +72,17 @@ HEADER_BOX = {"sahifa": 1, "x0": 0.0, "y0": 0.0, "x1": 0.6, "y1": 0.5}  # dev: "
 PAGE_BOX = {"sahifa": 1, "x0": 0.0, "y0": 0.0, "x1": 1.0, "y1": 1.0}  # butun 1-sahifa (VLM uchun)
 
 
+def fixed_regions() -> dict[str, dict]:
+    """Joyi "№" ga bog'liq bo'lmagan bo'laklar: header va butun sahifa. Sahifa OCR'idan oldin ham
+    kesiladi — date_ocr ularni VLM'ga darhol yuboradi. ocr_regions'da ham birinchi turadi."""
+    return {"header": HEADER_BOX, "page": PAGE_BOX}
+
+
 def ocr_regions(first: CachedPage) -> dict[str, dict]:
     """Qo'lyozma OCR uchun bo'laklar (B5.3b): line — "sana № raqam" qatori, date — "№" dan chapi,
     number — o'ngi, reply — "На № … от …", header — chap yuqori qism ("№" topilmasa ham bor),
     page — butun 1-sahifa (sana o'ngda yoki pastda bo'lishi mumkin)."""
-    found = {"header": HEADER_BOX, "page": PAGE_BOX}
+    found = fixed_regions()
     halves = date_number_boxes(first)
     if halves:
         date, number = halves["hujjat_sana"][0], halves["hujjat_raqami"][0]
