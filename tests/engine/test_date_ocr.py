@@ -154,6 +154,19 @@ def test_parallel_reading_gives_the_same_result_as_one_lane(letter, monkeypatch)
     assert parallel[2] == ["vlm-extract", "rapidocr", "tesseract-block"]  # ishlamagani chetda
 
 
+def test_vlm_cannot_confirm_itself_against_independent_ocrs(letter):
+    # 27.10 holati (to'qilgan sanalar): VLM ikki savolda bir xil xato kun, mustaqillar — to'g'ri
+    readers = [
+        FakeReader("vlm-extract", '{"sana": "11.03.2026", "raqam": "55/07-1234"}'),
+        FakeReader("vlm", "11.03.2026 № 55/07-1234"),
+        FakeReader("rapidocr", "12.03.2026 No 55"),
+        FakeReader("apple-vision", "12.03.2026 Nº 55/07-1234"),
+    ]
+    reading = DateOcr(readers).read(*letter(NO_PRINTED_DATE), RECEIVED)
+    assert reading.prefill is None  # ziddiyat — xato sana yozilmaydi
+    assert "12.03.2026" in reading.suggestions  # to'g'risi — bir bosishda
+
+
 def wait_for(condition, seconds: float = 5.0) -> None:
     deadline = time.monotonic() + seconds
     while not condition() and time.monotonic() < deadline:

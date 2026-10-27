@@ -7,6 +7,19 @@ from scripts.ocr.date_failures import outcome
 RECEIVED, TRUTH = date(2026, 1, 9), "19.12.2025"
 
 
+def test_conflict_rule_moves_a_self_confirmed_vlm_date_to_suggestions():
+    wrong = "11.12.2025"
+    texts = [
+        {"header": f'{{"sana": "{wrong}", "raqam": "54"}}'},  # VLM aniq savol — xato kun
+        {"header": f"{wrong} № 54"},  # VLM ko'chirish — o'sha xato ("tasdiq")
+        {"header": f"{TRUTH} № 54"},  # mustaqil OCR'lar — to'g'ri
+        {"header": f"{TRUTH} № 54"},
+    ]
+    readers = ["vlm-extract", "vlm", "rapidocr", "apple-vision"]
+    assert outcome(texts, None, TRUTH, RECEIVED) == "yozildi xato"  # eski qoida
+    assert outcome(texts, None, TRUTH, RECEIVED, readers=readers) == "faqat takliflarda"
+
+
 def test_outcomes_follow_the_prototype_rule():
     extract_ok = {"header": '{"sana": "19.12.2025", "raqam": "54"}'}  # aniq savol (vlm-extract)
     rapid_ok = {"line": "19.12.2025 № 54"}

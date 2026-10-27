@@ -9,11 +9,68 @@ from src.fields.date_vote import (
     header_anchor_date,
     in_window,
     only_candidate,
+    prefill_date,
     ranked,
+    rival_dates,
+    same_model,
     self_confirmed,
     vote,
     windowed,
 )
+
+READERS = ["vlm-extract", "vlm", "rapidocr", "rapidocr-eslav", "tesseract-block", "apple-vision"]
+RIGHT, WRONG_DAY = "17.01.2026", "11.01.2026"
+
+
+def seen(**dates) -> dict[str, str | None]:
+    keys = ("date", "line", "header_anchor", "header_first", "page")
+    return {key: dates.get(key) for key in keys}
+
+
+# 27.10 holati (to'qilgan sanalar): VLM'ning ikki savoli bir xil xato kun, mustaqillar — to'g'ri
+VLM_AGAINST_OTHERS = [
+    seen(header_first=WRONG_DAY, page=WRONG_DAY),
+    seen(header_anchor=WRONG_DAY, header_first=WRONG_DAY),
+    seen(header_first=RIGHT),
+    seen(header_first=RIGHT),
+    seen(),
+    seen(header_first=RIGHT, page=RIGHT),
+]
+
+
+def test_vlm_questions_are_one_model():
+    assert same_model("vlm-extract", "vlm")
+    assert not same_model("vlm-extract", "rapidocr") and not same_model("rapidocr", "apple-vision")
+
+
+def test_independent_ocrs_agreeing_on_another_date_stop_the_prefill():
+    assert rival_dates(VLM_AGAINST_OTHERS, READERS, WRONG_DAY) == [(RIGHT, 3)]
+    assert prefill_date(VLM_AGAINST_OTHERS, "vlm-extract") == WRONG_DAY  # eski qoida (readers'siz)
+    assert prefill_date(VLM_AGAINST_OTHERS, "vlm-extract", READERS) is None  # ziddiyat — yozilmaydi
+    assert ranked([set(f.values()) - {None} for f in VLM_AGAINST_OTHERS])[0] == RIGHT  # taklifda
+
+
+def test_no_conflict_keeps_the_prefill():
+    one_other = [seen(header_first=RIGHT), seen(), seen(line=RIGHT), seen(header_first=WRONG_DAY)]
+    one_other += [seen(), seen()]  # boshqa sanani faqat 1 mustaqil OCR ko'rgan — ziddiyat emas
+    assert prefill_date(one_other, "vlm-extract", READERS) == RIGHT
+    # boshqa sanani 2 mustaqil ko'rgan, lekin yozilajak sanani ham 2 tasi — ustun emas
+    tied = [seen(header_first=RIGHT), seen(), seen(line=RIGHT), seen(line=RIGHT, page=WRONG_DAY)]
+    tied += [seen(header_first=WRONG_DAY), seen()]
+    assert prefill_date(tied, "vlm-extract", READERS) == RIGHT
+
+
+def test_second_vlm_question_is_not_counted_as_independent_rival():
+    found = [
+        seen(header_first=RIGHT),
+        seen(header_first=WRONG_DAY, date=WRONG_DAY),
+        seen(line=RIGHT),
+        seen(),
+        seen(),
+        seen(header_first=WRONG_DAY),
+    ]  # boshqa sana: VLM ikkinchi savoli + 1 mustaqil — ziddiyatga yetmaydi
+    assert rival_dates(found, READERS, RIGHT) == []
+    assert prefill_date(found, "vlm-extract", READERS) == RIGHT
 
 
 def test_vote_needs_two_engines_and_a_clear_winner():

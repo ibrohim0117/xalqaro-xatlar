@@ -8,7 +8,9 @@ Natija (B5.3b o'lchovlari, dev 70, oyna 365 kun):
     tasdiqlagan — 32/34 (B5.3c-8, X2): maydonga yoziladi, lekin "tekshirish kerak" belgisi bilan
     (sezdirmasdan yozilgan xato sana bo'lmasin). Topuvchi — birinchi ISHLAGAN OCR: aniq savol
     ishlamasa — VLM ko'chirish (27/28); VLM umuman bo'lmasa — date bo'laklaridan kamida 2 OCR
-    kelishgan sana (VLM'siz o'lchov: 18/18);
+    kelishgan sana (VLM'siz o'lchov: 18/18). 27.10: mustaqil OCR'lar boshqa sanaga kelishgan
+    bo'lsa — yozilmaydi (date_vote.rival_dates; yangi 25: xato yozilgan 3 -> 0, dev: to'g'ri
+    54 -> 50);
   - suggestions: ko'proq OCR ko'rgan 3 ta sana — xodim bir bosishda tanlaydi.
 B5.11 yil tuzatish va B5.14 Apple Vision bilan (dev 70): sana to'g'ri 54, xato 2, bir bosishda 63.
 Biror OCR ishlamasa (masalan, VLM serveri o'chiq) — shu xat uchun chetlanadi, qolganlari ishlaydi.
@@ -216,7 +218,7 @@ class DateOcr:
         )  # sahifa OCR'i bilan ustma-ust bo'lishi mumkin
         if auto:  # sana bosma — OCR matnlari faqat raqam uchun (B5.12)
             return DateReading(auto=auto, seconds=seconds, readers=worked, texts=read)
-        prefill = prefill_date(found, worked[0] if worked else None)
+        prefill = prefill_date(found, worked[0] if worked else None, worked)  # + ziddiyat (27.10)
         suggestions = ranked([{d for d in f.values() if d} for f in found])
         return DateReading(None, prefill, suggestions, seconds, worked, read)
 

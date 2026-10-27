@@ -48,9 +48,11 @@ def outcome(
     finder: str = READERS[0],
     patterns=OCR_PATTERNS,
     fix_years: bool = True,
+    readers: list[str] | None = None,
 ) -> str:
     """Prototip qoidasi bilan bu xatda sana qaysi holatga tushadi (texts[0] — finder OCR'i).
-    fix_years=False — eski qoida: oynadan tashqaridagi sana tuzatilmaydi, tashlab yuboriladi."""
+    fix_years=False — eski qoida: oynadan tashqaridagi sana tuzatilmaydi, tashlab yuboriladi.
+    readers (texts bilan bir tartibda) — 27.10 ziddiyat qoidasi ham (date_vote.prefill_date)."""
     if in_window(text_layer, received, WINDOW_DAYS):
         return "yozildi to'g'ri" if text_layer == truth else "yozildi xato"
     found = [engine_dates(t, patterns) for t in texts]
@@ -61,7 +63,7 @@ def outcome(
             {k: v if in_window(v, received, WINDOW_DAYS) else None for k, v in f.items()}
             for f in found
         ]
-    if prefill := prefill_date(found, finder):
+    if prefill := prefill_date(found, finder, readers):
         return "yozildi to'g'ri" if prefill == truth else "yozildi xato"
     return (
         "faqat takliflarda"
@@ -94,13 +96,13 @@ def main() -> None:
             for r in READERS
         ]
         text_layer = date_and_number(first.text_layer)[0]
-        case = outcome(texts, text_layer, truth, received)
+        case = outcome(texts, text_layer, truth, received, readers=READERS)
         cases[case] += 1
-        before = outcome(texts, text_layer, truth, received, fix_years=False)
+        before = outcome(texts, text_layer, truth, received, fix_years=False, readers=READERS)
         unfixed[before] += 1
         if before != case:
             moved[f"{before} -> {case}"].append(doc_id)
-        old = outcome(texts, text_layer, truth, received, patterns=DATE_PATTERNS)
+        old = outcome(texts, text_layer, truth, received, patterns=DATE_PATTERNS, readers=READERS)
         if args.diff and old != case:
             changed.append(f"{doc_id}: {old} -> {case}")
         if case.startswith("yozildi"):

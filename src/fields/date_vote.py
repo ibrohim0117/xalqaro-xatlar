@@ -5,6 +5,14 @@ sanalar TO'PLAMI bilan bitta ovoz beradi. Qoida (dev 70, oyna 365):
   - "biri topadi, boshqasi tasdiqlaydi" (prefill_date): topuvchi OCR (FINDERS) sanasi, boshqa OCR
     ko'rgan bo'lsa. VLM aniq savol bilan (B5.3c-8, X2): 34 tadan 32 to'g'ri; VLM ko'chirish
     (B5.3b-6): 28 tadan 27. Shuning uchun avtomatik EMAS, "tekshiring" belgisi bilan yoziladi;
+  - 27.10 ziddiyat (rival_dates, C varianti): kamida 2 MUSTAQIL OCR (topuvchi bilan bir model emas)
+    boshqa sanaga kelishgan va u yozilajak sanadan ko'p ovoz olgan bo'lsa — yozilmaydi, faqat
+    takliflar. Sabab: Кызмат blankida VLM'ning ikki savoli bir xil xato kun berib, bir-birini
+    "tasdiqlagan", RapidOCR va Apple Vision esa to'g'ri o'qigan. O'lchov (compare_date_rules):
+    yangi 25 — xato yozilgan 3 -> 0, to'g'ri 18 -> 18; dev 70 — to'g'ri 54 -> 50 (4 tasi bo'sh
+    qoladi, to'g'risi takliflarda), xato 2 -> 2; bir bosishda o'zgarmadi (63/70, 22/25),
+    "to'g'ri -> xato" 0.
+    Ziddiyatda mustaqillar sanasini yozish (D) rad etildi: dev'da 4 ta to'g'ri -> xato;
   - takliflar (ranked): ko'proq OCR ko'rgan 3 ta sana;
   - oyna (in_window): sana kelgan kundan oldin va ko'pi bilan 365 kun oldin (dev'da 9..97 kun);
   - B5.11 yil tuzatish (fix_year): oynadan tashqaridagi sanada kun va oy o'sha qoladi, yil —
@@ -84,13 +92,46 @@ FINDERS = {
 }
 
 
-def prefill_date(found: list[dict[str, str | None]], finder: str | None) -> str | None:
+RIVAL_MIN = 2  # kamida shuncha mustaqil OCR kelishgan boshqa sana — ziddiyat
+
+
+def same_model(a: str, b: str) -> bool:
+    """VLM'ning savollari (vlm-extract, vlm) — bitta model: bir-birining ovozi mustaqil emas."""
+    return a.startswith("vlm") and b.startswith("vlm")
+
+
+def rival_dates(
+    found: list[dict[str, str | None]], readers: list[str], written: str
+) -> list[tuple[str, int]]:
+    """Mustaqil OCR'lar (topuvchi readers[0] bilan bir model emas) kelishgan BOSHQA sanalar: kamida
+    RIVAL_MIN ovoz va yozilajak sanadan ko'p. (sana, ovoz) — ko'p ovozlisi oldinda, teng ovozda —
+    OCR va bo'lak tartibi. Har OCR har sanaga bitta ovoz beradi (qaysi bo'lakda bo'lsa ham)."""
+    votes, order = Counter(), {}
+    for reader, candidates in zip(readers[1:], found[1:], strict=True):
+        if same_model(reader, readers[0]):
+            continue
+        for day in dict.fromkeys(v for v in candidates.values() if v):
+            votes[day] += 1
+            order.setdefault(day, len(order))
+    rivals = [d for d, n in votes.items() if d != written and n >= RIVAL_MIN and n > votes[written]]
+    return [(d, votes[d]) for d in sorted(rivals, key=lambda d: (-votes[d], order[d]))]
+
+
+def prefill_date(
+    found: list[dict[str, str | None]], finder: str | None, readers: list[str] | None = None
+) -> str | None:
     """ "Tekshiring" belgisi bilan yoziladigan sana. found[0] — finder (FINDERS'da bo'lsa): uning
     sanasi, boshqa OCR tasdiqlasa; aks holda (VLM yo'q) — date bo'laklaridan kamida 2 OCR kelishgan
-    sana."""
+    sana. readers (found bilan bir tartibda, 1-si — finder) berilsa — 27.10 ziddiyat qoidasi:
+    mustaqil OCR'lar boshqa sanaga kelishgan bo'lsa, yozilmaydi (rival_dates). readers'siz — eski
+    qoida (o'lchovlarda taqqoslash uchun)."""
     if finder in FINDERS:
-        return confirmed(found, first_keys=FINDERS[finder])
-    return vote([{f["date"]} - {None} for f in found])
+        date = confirmed(found, first_keys=FINDERS[finder])
+    else:
+        date = vote([{f["date"]} - {None} for f in found])
+    if date and readers and rival_dates(found, readers, date):
+        return None
+    return date
 
 
 def ranked(per_engine: list[set[str]], k: int = 3) -> list[str]:
