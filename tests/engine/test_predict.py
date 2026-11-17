@@ -127,6 +127,17 @@ def test_predict_finds_familiar_sender():
     assert "hujjat_junatuvchi_tashkilot" not in answer["tekshirish_kerak"]
 
 
+def test_familiar_sender_without_blank_place_is_written_but_flagged():
+    agency = "АГЕНТСТВО ВЫМЫШЛЕННЫХ УСЛУГ ГЛАВНОЕ УПРАВЛЕНИЕ"  # blankda hudud ham, davlat ham yo'q
+    model = learn_model(
+        [truth(FARGONA, sender="Soxta Agentlik"), truth(FARGONA, sender="Soxta Gruziya")],
+        [agency, GEORGIA],
+    )
+    answer = predict(letter_with_blank(agency), model)
+    assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] == "Soxta Agentlik"
+    assert "hujjat_junatuvchi_tashkilot" in answer["tekshirish_kerak"]  # B5.20: tekshiring
+
+
 def test_unknown_sender_is_flagged_not_guessed():
     blank = "Министерство юстиции Республики Молдова Агентство публичных услуг"
     answer = predict(letter_with_blank(blank), SENDER_MODEL)

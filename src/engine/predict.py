@@ -57,9 +57,15 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
     )
     score, sender = ranking[0] if ranking else (0.0, None)
     margin = score - (ranking[1][0] if len(ranking) > 1 else 0.0)
+    places = blank_places(pages)
     if sender and score >= SENDER_THRESHOLD:
         rekvizit["hujjat_junatuvchi_tashkilot"] = sender
-    elif sender and margin >= SENDER_MARGIN and same_place(blank_places(pages), sender):
+        if not places:
+            # B5.20: blankda hudud/davlat topilmadi — yuqori ball ham ishonchsiz: yangi xatlarda
+            # (simulate_arrival) shunday 10 tadan 4 tasi xato, belgisiz xatolar 5 tadan 4 tasi shu.
+            # Joy nomga zid bo'lishi esa xato belgisi emas (31 tadan 1 xato) — u tekshirilmaydi
+            flags.append("hujjat_junatuvchi_tashkilot")
+    elif sender and margin >= SENDER_MARGIN and same_place(places, sender):
         # B5.8: aniq ustun va blankdagi joy mos, lekin ball past — yoziladi, "tekshiring" bilan
         rekvizit["hujjat_junatuvchi_tashkilot"] = sender
         flags.append("hujjat_junatuvchi_tashkilot")
@@ -69,7 +75,6 @@ def predict(pages: list[CachedPage], model: Model) -> dict:
         # past bo'lsa ham to'g'risi ko'pincha shular orasida (dev: 2 xatda 1- va 2-o'rinda)
         # blankda hudud/davlat aniqlangan bo'lsa — faqat nomida shu joy bor tanish tashkilotlar
         # (yangi xatlar: Kalmikiya blankiga Rostov va Ukraina taklif qilingan edi)
-        places = blank_places(pages)
         known = [
             name
             for score, name in ranking
