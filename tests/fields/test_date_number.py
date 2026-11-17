@@ -123,6 +123,7 @@ def test_is_date_token(token, expected):
         ("54/07-16606", "54/07-16606"),  # faqat raqam bo'lagi
         ("№ ___ от ___", None),
         ("52/05-", None),  # chala
+        ("№ 12-И/34", "12-I/34"),  # B5.19: kirill harf lotinga (json'da harflar lotincha)
         ("", None),
     ],
 )

@@ -9,6 +9,7 @@ json'dagi shakl: sana "DD.MM.YYYY", raqam xatdagidek ("54/07-16606").
 
 import re
 
+from src.common.text import latin_letters
 from src.reading.pages import CachedPage
 from src.reading.pdf_text import PageText, Word
 
@@ -189,7 +190,8 @@ def number_in(tokens: list[str]) -> str | None:
         if m and sum(ch.isdigit() for ch in m[0]) >= 2 and not is_date_token(m[0]):
             number = m[0].rstrip(".")
             # "52/05-" — bosma boshi, davomi qo'lda yozilgan va o'qilmagan: chala raqam yozilmaydi
-            return None if number.endswith(("-", "/")) else number
+            # B5.19: harflar lotinda (json'da shunday) — "12-И/34" -> "12-I/34"
+            return None if number.endswith(("-", "/")) else latin_letters(number)
     return None
 
 

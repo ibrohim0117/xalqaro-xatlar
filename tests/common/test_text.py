@@ -39,3 +39,12 @@ def test_most_common_counts_harmless_variants_together():
 )
 def test_to_latin(cyrillic, latin):
     assert to_latin(cyrillic) == latin
+
+
+def test_latin_letters_only_changes_cyrillic_letters():
+    from src.common.text import latin_letters
+
+    assert latin_letters("12-И/34") == "12-I/34"
+    assert latin_letters("54/07-16606") == "54/07-16606"  # harfsiz — o'zgarmaydi
+    assert latin_letters("Ен-5 і") == "En-5 i"  # "Е" doim "E"; ukraincha "і" ham
+    assert latin_letters("AB-1") == "AB-1"  # lotin harflar o'zgarmaydi

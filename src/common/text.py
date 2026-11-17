@@ -48,6 +48,17 @@ CYR2LAT = {
 VOWELS = set("аеёиоуыэюяўіїє")
 
 
+def latin_letters(text: str) -> str:
+    """Raqamdagi kirill harflar lotinga (B5.19): json'dagi 250 raqamning harflisi (24 ta) hammasi
+    lotincha ("I", "N", "S"…), kirill — 0; xodim "И" ni "I" deb yozadi. Raqam va ajratgichlar
+    o'zgarmaydi, katta-kichiklik saqlanadi. to_latin'dan farqi: "Е" doim "E" (ism qoidasi emas)."""
+    out = []
+    for ch in text:
+        latin = CYR2LAT.get(ch.lower())
+        out.append(ch if latin is None else latin.upper() if ch.isupper() else latin)
+    return "".join(out)
+
+
 def to_latin(word: str) -> str:
     """Kirill so'zni lotinga o'giradi. So'z boshida va unlidan keyin "Е" -> "Ye" (Евгений)."""
     out = []
