@@ -62,12 +62,12 @@ def test_grown_memory_recognizes_second_letter_and_learns_number_template():
 
     answer = predict(second.pages, base)  # A: xotirada yo'q — yozilmaydi
     assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] is None
-    model = grown(base, old, [first])  # B: birinchi xat tasdiqlangan
+    model = grown(old, [first])  # B: birinchi xat tasdiqlangan
     answer = predict(second.pages, model)
     assert answer["rekvizit_document"]["hujjat_junatuvchi_tashkilot"] == "Soxta Argentina"
     assert template_outcome(model, "Soxta Argentina", "12/3-46") == "qolip yo'q"  # 1 ta raqam
 
-    model = grown(base, old, [first, second])  # 2 ta raqamdan qolip "9/9-9", bosh qism "12/3-"
+    model = grown(old, [first, second])  # 2 ta raqamdan qolip "9/9-9", bosh qism "12/3-"
     assert template_outcome(model, "Soxta Argentina", third.doc["hujjat_raqami"]) == "qolipga mos"
     assert template_outcome(model, "Soxta Argentina", "99/3-47") == "qolipga mos emas"
     assert template_outcome(model, None, "12/3-47") == "qolip yo'q"  # jo'natuvchi yozilmagan
@@ -110,12 +110,11 @@ def test_template_fixes_number_read_by_ocr():
     from src.engine.number_ocr import read_number
 
     old = [item("DOC_1", NOVO, "Soxta Novosibirsk", "54/07-100", "01.01.2026")]
-    base = learn_model([i.truth for i in old], [i.header for i in old])
     earlier = [
         item("DOC_2", ARGENTINA, "Soxta Argentina", "12/3-45", "01.03.2026"),
         item("DOC_3", ARGENTINA, "Soxta Argentina", "12/3-46", "02.03.2026"),
     ]
-    model = grown(base, old, earlier)
+    model = grown(old, earlier)
     texts = {"vlm-extract": {"header": '{"raqam": "12-3-47"}'}, "rapidocr": {"header": "№ 12-3-47"}}
     reading = DateReading(readers=list(texts), texts=texts)
     first = earlier[0].pages[0]
@@ -143,3 +142,16 @@ def test_place_status_three_cases():
     assert place_status(pages, "Soxta Novosibirsk viloyati") == "joy mos"
     assert place_status(pages, "Soxta Gruziya vazirligi") == "joy boshqa"
     assert place_status(letter_with_blank("ГЛАВНОЕ УПРАВЛЕНИЕ"), "Soxta") == "joy topilmadi"
+
+
+def test_other_fields_compare_boshqarma_and_summary():
+    from scripts.rekvizit.simulate_arrival import other_fields
+
+    letter = item("DOC_1", NOVO, "Soxta", "1/1", "01.01.2026")
+    letter.truth["rekvizit_document"]["hujjatning_qisqacha_mazmuni"] = "Soxta mazmun"
+    letter.truth["tasks"] = [{"asosiy_ijrochilar_boshqarmalari": ["Soxta boshqarma"]}]
+    answer = {
+        "rekvizit_document": {"hujjatning_qisqacha_mazmuni": "soxta mazmun"},
+        "tasks": [{"asosiy_ijrochilar_boshqarmalari": []}],
+    }
+    assert other_fields(answer, letter) == {"boshqarma": "yozilmadi", "mazmun": "to'g'ri"}

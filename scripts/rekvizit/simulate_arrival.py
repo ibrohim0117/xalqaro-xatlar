@@ -6,7 +6,11 @@ sanasi tartibida o'tkaziladi; har xat FAQAT eski 100 xat va o'zidan OLDIN kelgan
 bilan aniqlanadi. O'zining javobi xotirada yo'q — baho halol.
   A — xotira faqat eski 100 xatdan, o'smaydi (26.10 yakuniy o'lchovdagi holat). Tekshiruv: yakuniy
       125 xatda jo'natuvchi 33 to'g'ri (papka rejimi bilan bir xil) chiqishi kerak.
-  B — xotira o'sadi: har xatdan keyin uning to'g'ri nomi, blanki va raqami xotiraga qo'shiladi.
+  B — xotira o'sadi: eski 100 va oldin kelgan yangi xatlarning HAMMASIDAN o'rganilgan model
+      (build_model_all kabi): blank -> nom, raqam qoliplari, boshqarma nomlari, javob xat shakllari.
+Prototip kabi faqat 1–6-sahifa (pipeline.MAX_PAGES) — jo'natuvchi faqat 1-sahifadan, boshqarma va
+mazmun (javob xat) 1–6-sahifadan. Boshqarma va mazmun ham A va B da: o'sgan model nomlari va javob
+xat shakllari natijani buzmaydimi (tekshiruv: A, yakuniy 125 — 26.10 papka 100 va 121).
 Jo'natuvchi: to'g'ri / xato / yozilmadi va bir bosishda — tashkilot xotirada bor xatlar va xotirada
 yo'q (tashkilotning birinchi xati) alohida: birinchi xatni xotira topa olmaydi, faqat takliflar.
 Raqam qolipi (OCR'siz): yozilgan jo'natuvchining qolipi bormi va to'g'ri raqam unga mosmi.
@@ -22,7 +26,7 @@ Ishga tushirish: poetry run python -m scripts.rekvizit.simulate_arrival [--ids]
 import argparse
 import json
 from collections import Counter
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date as Date
 from pathlib import Path
 
@@ -30,17 +34,18 @@ from rapidfuzz import fuzz
 
 from scripts.data.sample_new import new_root
 from scripts.rekvizit.measure_senders import sender_of
+from src.common.schema import expected_boshqarma
 from src.common.text import normalize
 from src.engine.date_ocr import DateReading
-from src.engine.feedback import with_confirmed
-from src.engine.model import Model, learn_model, number_part, number_template
+from src.engine.model import Model, learn_model, number_template
 from src.engine.number_ocr import NumberReading, read_number
+from src.engine.pipeline import MAX_PAGES
 from src.engine.predict import predict
 from src.evaluation.dataset import Letter, list_letters, load_truth
 from src.evaluation.text_cache import get_pages
 from src.fields.date_vote import to_day
 from src.fields.number_template import key, matches
-from src.fields.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, blank_words, header_text
+from src.fields.sender import SENDER_MODE, SENDER_THRESHOLD, Matcher, header_text
 from src.fields.sender_variants import blank_places, same_place
 from src.reading.pages import CachedPage
 
@@ -123,13 +128,24 @@ def template_outcome(model: Model, sender: str | None, number: str | None) -> st
     return "qolipga mos" if number and matches(number, template) else "qolipga mos emas"
 
 
-def grown(base: Model, old: list[Item], earlier: list[Item]) -> Model:
-    """B xotirasi: eski 100 xat modeli + oldin kelgan yangi xatlar (blank, nom, raqam qolipi)."""
-    named = [item for item in earlier if item.sender]
-    model = with_confirmed(
-        base, [blank_words(item.header) for item in named], [item.sender for item in named]
-    )
-    return replace(model, number_templates=number_part([item.truth for item in old + earlier]))
+def grown(old: list[Item], earlier: list[Item]) -> Model:
+    """B xotirasi: eski 100 va oldin kelgan yangi xatlar — hammasidan o'rganilgan model."""
+    items = old + earlier
+    return learn_model([item.truth for item in items], [item.header for item in items])
+
+
+def field_outcome(value: str | None, truth: str | None) -> str:
+    return "yozilmadi" if not value else "to'g'ri" if same(value, truth) else "xato"
+
+
+def other_fields(answer: dict, item: Item) -> dict[str, str]:
+    """Boshqarma va mazmun: to'g'ri / xato / yozilmadi (evaluate kabi solishtirish)."""
+    names = (answer["tasks"] or [{}])[0].get("asosiy_ijrochilar_boshqarmalari") or []
+    summary = answer["rekvizit_document"]["hujjatning_qisqacha_mazmuni"]
+    return {
+        "boshqarma": field_outcome(names[0] if names else None, expected_boshqarma(item.truth)),
+        "mazmun": field_outcome(summary, item.doc.get("hujjatning_qisqacha_mazmuni")),
+    }
 
 
 def saved_reading(doc_id: str, folders: tuple[Path, ...] = OCR_DIRS) -> DateReading | None:
@@ -202,23 +218,30 @@ def main() -> None:
     old = load(list_letters(), "eski")
     new = arrival_order(load(list_letters(new_root()), "yangi"))
     final = {letter.doc_id for letter in list_letters(FINAL)} if FINAL.exists() else set()
-    base = learn_model([item.truth for item in old], [item.header for item in old])
+    base = grown(old, [])
     old_names = {normalize(item.sender) for item in old if item.sender}
     seen = set(old_names)  # B: eski 100 + oldin kelgan yangilar
     senders, numbers = Counter(), Counter()  # (variant, guruh, natija) -> soni
     templates = Counter()  # (variant, natija) -> soni
     final_right = Counter()  # A, yakuniy 125: maydon -> to'g'ri soni
     writes = Counter()  # B yozgan jo'natuvchilar: (belgi, joy holati, to'g'ri/xato) -> soni
-    sender_rows, number_rows, no_ocr = [], [], 0
+    others = Counter()  # (maydon, variant, natija) -> soni: boshqarma va mazmun
+    sender_rows, number_rows, other_rows, no_ocr = [], [], [], 0
     for i, item in enumerate(new):
         print(f"\r  aniqlash: {i + 1}/{len(new)} xat…" + " " * 10, end="", flush=True)
         name = normalize(item.sender)
         number = item.doc.get("hujjat_raqami")
-        model_b = grown(base, old, new[:i])
-        written = {}
+        model_b = grown(old, new[:i])
+        written, fields = {}, {}
         for label, model, known in (("A", base, name in old_names), ("B", model_b, name in seen)):
-            answer = predict(item.pages, model)
+            answer = predict(item.pages[:MAX_PAGES], model)
             kind, one_click = sender_outcome(answer, item.sender)
+            fields[label] = other_fields(answer, item)
+            for field, result in fields[label].items():
+                others[field, label, "xat"] += 1
+                others[field, label, result] += 1
+                if label == "A" and item.doc_id in final:
+                    final_right[field] += result == "to'g'ri"
             for group in ("hammasi", "xotirada bor" if known else "xotirada yo'q"):
                 senders[label, group, "xat"] += 1
                 senders[label, group, kind] += 1
@@ -236,6 +259,11 @@ def main() -> None:
                 sender_rows.append(f"{item.doc_id} [{group}, {kind}] {detail}")
         templates["B*", template_outcome(model_b, item.sender, number)] += 1
         seen.add(name)
+        for field in ("boshqarma", "mazmun"):
+            if args.ids and fields["A"][field] != fields["B"][field]:
+                other_rows.append(
+                    f"{item.doc_id} {field}: A {fields['A'][field]} -> B {fields['B'][field]}"
+                )
 
         reading = saved_reading(item.doc_id)
         if reading is None:
@@ -282,6 +310,18 @@ def main() -> None:
             if right or wrong:
                 print(f"  {flag + ', ' + place:<40}{right:>10}{wrong:>8}")
 
+    print("\nBoshqarma va mazmun (B: model nomlari va javob xat shakllari ham o'sadi)")
+    print(f"  {'':<40}{'xat':>6}" + "".join(f"{k:>13}" for k in KINDS[:3]))
+    for field in ("boshqarma", "mazmun"):
+        for label in ("A", "B"):
+            count = others[field, label, "xat"]
+            values = Counter({k: others[field, label, k] for k in KINDS[:3]})
+            print(f"  {field + ' ' + label:<40}{count:>6}{cells(values, KINDS[:3], count)}")
+    print(
+        f"\n  Tekshiruv: A, yakuniy {len(final)} xatda boshqarma {final_right['boshqarma']} "
+        f"(26.10 papka: 100), mazmun {final_right['mazmun']} (121)"
+    )
+
     print("\nRaqam qolipi (OCR'siz): yozilgan jo'natuvchining qolipi va to'g'ri raqam")
     print(f"  {'':<40}{'xat':>6}" + "".join(f"{k:>18}" for k in TEMPLATE_KINDS))
     for label, title in (*SENDER_ROWS, ("B*", "B, jo'natuvchi doim to'g'ri bo'lsa")):
@@ -293,11 +333,15 @@ def main() -> None:
     print(f"  OCR matni saqlanmagan: {no_ocr} xat")
     table(numbers, NUMBER_ROWS, ("hammasi",))
     right = final_right["raqam"]
-    print(f"\n  Tekshiruv: A, yakuniy {len(final)} xatda to'g'ri {right} (26.10 papka: 55)")
+    final_note = "26.10 papka: 55; B5.19 bilan 62"
+    print(f"\n  Tekshiruv: A, yakuniy {len(final)} xatda to'g'ri {right} ({final_note})")
 
     if args.ids:
         print("\nB: jo'natuvchi xato yoki tanish, lekin yozilmagan:")
         for row in sender_rows or ["—"]:
+            print(f"  {row}")
+        print("\nBoshqarma va mazmun: A va B natijasi farq qilgan xatlar:")
+        for row in other_rows or ["—"]:
             print(f"  {row}")
         print("\nRaqam: qolip (B) natijani o'zgartirgan xatlar:")
         for row in number_rows or ["—"]:
