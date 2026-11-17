@@ -57,7 +57,7 @@ lint:  ## kod tekshiruvi va formatlash (ruff)
 model:  ## dev 70 xatdan model + LOO javoblari (outputs/model.json, outputs/b4/)
 	poetry run python -m scripts.prototype.run_predict
 
-model-all:  ## eski 100 xatning hammasidan model (yangi xatlar uchun)
+model-all:  ## prototip modeli hamma 250 xatdan (eski 100 + yangi 150); --eski — faqat eski 100
 	poetry run python -m scripts.prototype.build_model_all
 
 eval:  ## dev LOO javoblarini baholash (avval: make model)

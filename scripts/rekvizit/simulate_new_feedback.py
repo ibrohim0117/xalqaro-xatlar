@@ -1,6 +1,8 @@
 """Yangi xatlar: jo'natuvchi — xodim tasdig'isiz va tasdig'i bilan (amaldagi ishga yaqin baho).
 
-Model eski 100 xatdan (outputs/model.json, build_model_all). Yangi xatlar DOC raqami tartibida
+Model eski 100 xatdan (outputs/model.json, `build_model_all --eski` bilan; 17.11 dan oddiy
+build_model_all 250 xatdan quradi — unda yangi xatlar xotirada, natija ma'nosiz; o'rniga
+simulate_arrival). Yangi xatlar DOC raqami tartibida
 (kelish tartibi) o'tkaziladi; jo'natuvchini prototipning o'zi (engine.predict) yozadi yoki taklif
 qiladi. Ikki variant:
   A — xotira o'zgarmaydi: papka rejimi natijasi bilan AYNAN bir xil bo'lishi kerak (tekshiruv);
